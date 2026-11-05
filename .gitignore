@@ -1,0 +1,15 @@
+# 本地连接与凭据
+.codex-live/
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+
+# 依赖、构建与本地文件
+node_modules/
+dist/
+coverage/
+*.log
+.DS_Store
+Thumbs.db
