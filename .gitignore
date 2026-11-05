@@ -13,3 +13,10 @@ coverage/
 *.log
 .DS_Store
 Thumbs.db
+
+# Local development tools and generated editor data
+.tools/
+bin/
+obj/
+TestResults/
+.vs/

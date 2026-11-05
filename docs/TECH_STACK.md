@@ -1,64 +1,59 @@
-# 桌面版技术栈
+# 无游戏引擎技术栈
 
-2026-11-05：用户已确认 Godot + C#、Windows x64、项目级 MCP。当前仅完成规划，尚未安装、构建或验证。完整最小版规则见 [MVP_SPEC.md](MVP_SPEC.md)。
+2026-11-05：根据发起人最新要求移除游戏引擎，采用 C# / .NET + Avalonia 桌面方案。玩法与可调初值继续以 [MVP_SPEC.md](MVP_SPEC.md) 为准；本文是技术规划，尚未建立源码工程。
 
-## 技术组合
+## 技术选择
 
-| 部分 | 技术 | 责任 |
+| 部分 | 选择 | 责任 |
 | --- | --- | --- |
-| 引擎 | Godot 4 稳定版 .NET 版本 | 2D 像素画面、输入、音效与 Windows 导出 |
-| 主语言 | C# | 游戏与桥接逻辑，减少维护边界 |
-| 界面 | Godot Control + Theme | 地图外围面板、程序查看与调试 |
-| 模拟 | 独立纯 C# 类库 | 资源、采运、信息素、经济、计费与回放 |
-| 算法 | 受限文本 DSL 与 C# 解释器 | 共享程序、个体记忆、指令预算 |
-| Agent | 当前 Codex + 项目级 MCP | 受控观察、更新程序、增员、升级 |
-| 存储 | System.Text.Json，JSON 存档与 JSONL 日志 | 本地状态、配置、程序版本和操作 |
-| 验证 | xUnit + 无画面评估器 | 规则、确定性、预算、信息过滤与策略对比 |
-| 协作与发布 | GitHub PR、Actions、Releases | 后续自动验证与完整桌面包分发 |
+| 语言与运行时 | C#、.NET 10 LTS，目标 net10.0 | 核心、桌面和桥接统一语言 |
+| 桌面界面 | Avalonia Desktop + MVVM | 窗口、面板、输入、主题与程序查看 |
+| 地图绘制 | Avalonia 自定义 Control / DrawingContext | 像素地图、蚂蚁、资源、信息素与选择 |
+| 模拟 | 无 UI 依赖的纯 C# 类库 | 固定 Tick、移动、采运、经济和统计 |
+| 算法 | 自定义受限文本 DSL + C# 解释器 | 解析、校验、预算与独立记忆 |
+| 扩展契约 | 独立 C# Contracts 类库 | 版本化 DTO、命令、规则接口与内容标识 |
+| Agent | 独立 STDIO MCP 服务，使用官方 C# SDK | 连接 Codex 或其他 MCP 客户端 |
+| 本地通信 | Windows 命名管道 + 有界长度前缀 JSON 消息 | 桥接进程连接运行中的桌面宿主 |
+| 持久化 | System.Text.Json；JSON 存档、JSONL 操作日志 | 带 schemaVersion 的状态与回放 |
+| 验证与发布 | xUnit、无界面评估器、dotnet publish、GitHub Actions | 规则验证、策略比较、Windows x64 包 |
 
-运行环境使用所选 Godot 支持的 .NET LTS。SDK、目标框架、引擎和同版本 .NET 导出模板在接入阶段共同锁定，先验证编译和 Windows 运行，再固定版本。当前没有依赖锁文件，不声称兼容性已验证。
+Avalonia 提供桌面 UI 和绘图；模拟时钟、地图坐标、程序调度、规则与存档由项目实现。首版使用框架绘图 API，只有实测需要时才直接使用 SkiaSharp。无需游戏引擎、浏览器或引擎导出模板。
 
-## Agent 接入
+.NET 10 是项目目标，不把本机已安装的 .NET 9 当作长期基线。Avalonia 与 MCP SDK 选择实现当时兼容 net10.0 的稳定版本，首次成功构建后提交 global.json、Directory.Packages.props 和 packages.lock.json；CI 使用锁定还原。当前尚未锁定包版本或验证构建。
 
-项目级 STDIO MCP 桥为推荐落地方式，桥接运行中的桌面游戏；本地 IPC 细节在最小连通性验证时确定。规划工具包括读取状态、读取／校验／应用程序、回滚、增员和升级。
-
-首版没有内置模型服务调用或后台常驻优化器，用户在 Codex 指定单轮／多轮任务。游戏不需要配置模型服务商密钥；首次 MCP 配置可能需重启连接或会话，须实际核验当前 Codex 工具出现及读写成功。
-
-## 模拟与性能
-
-原型为 20 Tick／模拟秒、初始 10 只、最多 100 只工蚁，属于待验证目标。地图无障碍，不引入复杂寻路。目标移动与程序决策独立，固定速度与动作冷却不能被更频繁的指令突破。
-
-先单线程更新模拟，使用稳定顺序、有种子随机数、有限查询和有界数据。渲染位置插值；只有实测需要时才加入批量绘制或后台模拟线程。
-
-## 数据与发布
-
-先采用本地存档，无数据库和云服务。手动存档保存完整世界、程序、记忆、随机数、配置和事件时序，读档暂停，无离线发展。
-
-后续发布完整 Windows 导出目录的压缩包，含可执行程序及必要组件；必须在目标环境启动、运行采运闭环并检查存读档。公开发布与 CI 仅为后续计划，本轮未执行。
-
-## 规划目录
+## 模块与贡献入口
 
 ```text
 src/
-  AntMind.Game/       Godot 场景、界面、画面适配
-  AntMind.Core/       资源、行动、信息素、经济与统计
-  AntMind.Programs/   DSL、校验、解释器、预算
-  AntMind.Bridge/     MCP 与运行中游戏的本地通信
+  AntMind.Contracts/   DTO、命令、查询与扩展接口
+  AntMind.Core/        确定性世界与规则
+  AntMind.Programs/    DSL 解析、校验与计费解释器
+  AntMind.Runtime/     Tick 调度、命令队列、快照与存档
+  AntMind.Desktop/     Avalonia 窗口、MVVM 与像素地图
+  AntMind.Mcp/         STDIO 工具与命名管道客户端
 tools/
-  AntMind.Evaluator/  无画面运行、回放与算法比较
+  AntMind.Evaluator/   无界面运行、回放和策略比较
 tests/
   AntMind.Core.Tests/
   AntMind.Programs.Tests/
-assets/
+  AntMind.Integration.Tests/
+content/               JSON 配置、默认程序与内容清单
+assets/                原创像素素材
 docs/
 ```
 
-目录为规划，尚未建立源码工程。建议一人负责画面和交互，一人负责模拟、DSL 与桥接，具体人员待约定。
+目录是规划，尚未创建。日常扩展优先通过 JSON 内容或普通 C# 项目引用完成，新增行为通过明确接口注册。首版不加入动态 DLL 热加载或通用插件市场。多人协作可以分别负责核心规则、解释器、桌面界面和 MCP 适配。
 
-## 参考资料
+## 性能与分发
 
-- [Godot .NET 下载与模板](https://godotengine.org/download/windows/)
-- [Godot C# 环境要求](https://docs.godotengine.org/en/stable/tutorials/scripting/c_sharp/c_sharp_basics.html)
-- [Windows 导出](https://docs.godotengine.org/en/stable/tutorials/export/exporting_for_windows.html)
+20 Tick／模拟秒，初始 10 只、最多 100 只工蚁。模拟在单独的串行执行上下文内更新，界面消费只读快照；后台运行不依赖窗口绘制频率。先绘制一个地图控件，避免每只蚂蚁对应一棵复杂 UI 控件树。暂停、单步与倍速共用 Tick 推进逻辑。
+
+Windows x64 首发使用自包含目录发布并打 ZIP，保留必要的原生依赖；首版不采用单文件裁剪或 Native AOT。其他桌面平台仅保留架构适配空间，另行验证后再承诺支持。
+
+## 官方资料
+
+- [Avalonia 自定义控件与绘图](https://docs.avaloniaui.net/docs/custom-controls)
+- [Avalonia 平台与环境要求](https://docs.avaloniaui.net/docs/supported-platforms)
 - [.NET 支持策略](https://dotnet.microsoft.com/en-us/platform/support/policy/dotnet-core)
-- [Codex MCP 官方文档](https://learn.chatgpt.com/docs/extend/mcp)
+- [官方 MCP C# SDK](https://github.com/modelcontextprotocol/csharp-sdk)
+- [Codex MCP 文档](https://learn.chatgpt.com/docs/extend/mcp)
