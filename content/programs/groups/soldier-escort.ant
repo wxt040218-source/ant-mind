@@ -1,0 +1,14 @@
+if (health <= 12) {
+    if (at_nest) {
+        if (nest_meat > 0) { eat(food_meat); }
+        else { eat(food_fruit); }
+    } else { move_to(retreat_x, retreat_y); }
+} else if (nearest_enemy_id > 0) {
+    if (nearest_enemy_distance <= 1000) { attack(nearest_enemy_id); }
+    else { move_to(nearest_enemy_x, nearest_enemy_y); }
+} else {
+    if (queen_connected) { request_queen_info(); }
+    let ally = nearest_group_member_id;
+    if (ally > 0) { follow(ally, 1000); }
+    else { move_to(rally_x, rally_y); }
+}

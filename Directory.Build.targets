@@ -1,0 +1,1 @@
+<Project><ItemGroup Condition="'$(OutputType)' == 'Exe' Or '$(OutputType)' == 'WinExe'"><Content Include="$(MSBuildThisFileDirectory)content/**/*" Link="content/%(RecursiveDir)%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest"/></ItemGroup></Project>

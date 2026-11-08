@@ -1,0 +1,12 @@
+if (carry > 0) {
+    if (at_nest) { deliver(); release_claim(); }
+    else { move_to(nest_x, nest_y); }
+} else if (nearest_amount > 0) {
+    claim_food(nearest_id, capacity, 200);
+    if (nearest_distance <= 1000) { pickup(); }
+    else { move_to(nearest_x, nearest_y); }
+} else {
+    if (queen_connected) { report_discovery(); request_queen_info(); }
+    if (group_order_version == 0) { move_to(nest_x, nest_y); }
+    else { move_to(objective_x, objective_y); }
+}

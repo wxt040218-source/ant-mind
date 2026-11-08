@@ -1,0 +1,46 @@
+{
+  "queen": {
+    "file": "queen.png",
+    "source": "像素蚂蚁女王立绘.png",
+    "size": [
+      1270,
+      1239
+    ],
+    "pngColorType": 6,
+    "facesRight": false,
+    "sha256": "09dbc37e817629eb05da69f456e4bbae6adc2e08e1654b25ab37ca12a651d6a0"
+  },
+  "soldier": {
+    "file": "soldier.png",
+    "source": "像素蚂蚁士兵.png",
+    "size": [
+      1299,
+      1211
+    ],
+    "pngColorType": 6,
+    "facesRight": true,
+    "sha256": "cf61a5e0cdfdbeca1811cfe0bbec498285e2340deb24e81c31ff8628d82c102a"
+  },
+  "scout": {
+    "file": "scout.png",
+    "source": "右向像素侦察兵.png",
+    "size": [
+      1299,
+      1211
+    ],
+    "pngColorType": 6,
+    "facesRight": true,
+    "sha256": "66e171a12b02e44414f213c65ad873a8fe884fd7710fd0f7ab88c8350bdfde6a"
+  },
+  "hauler": {
+    "file": "hauler.png",
+    "source": "像素搬运工背负叶篮 cargo.png",
+    "size": [
+      1264,
+      1244
+    ],
+    "pngColorType": 6,
+    "facesRight": false,
+    "sha256": "6fa22844b702edc7d1730cd88c9e4db7c1a0839ec344364e0ae02d3b1d9cf6e6"
+  }
+}

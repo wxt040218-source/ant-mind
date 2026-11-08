@@ -1,0 +1,235 @@
+{
+  "schemaVersion": 10,
+  "id": "antmind.world.default",
+  "world": {
+    "width": 128,
+    "height": 128,
+    "initialAnts": 10,
+    "ticksPerSecond": 20,
+    "initialStock": 100,
+    "populationCap": 100,
+    "recruitmentCost": 20,
+    "minimumReserve": 40,
+    "initialResourceNodes": 4,
+    "resourceMin": 1,
+    "resourceMax": 5,
+    "resourceNodeCap": 20,
+    "groundResourceCap": 1200,
+    "resourceRefreshTicks": 300,
+    "nestExclusionCells": 4,
+    "interactionCooldownTicks": 10,
+    "eatingTicks": 40,
+    "foods": [
+      {
+        "id": "fruit",
+        "name": "水果",
+        "healAmount": 3
+      },
+      {
+        "id": "meat",
+        "name": "肉",
+        "healAmount": 6
+      },
+      {
+        "id": "fiber",
+        "name": "植物纤维",
+        "healAmount": 0,
+        "edible": false
+      },
+      {
+        "id": "fruit_concentrate",
+        "name": "水果浓缩",
+        "healAmount": 6
+      },
+      {
+        "id": "protein_meal",
+        "name": "蛋白餐",
+        "healAmount": 12
+      }
+    ],
+    "brainBudgets": [
+      64,
+      128,
+      256,
+      512,
+      1024
+    ],
+    "brainIntervals": [
+      10,
+      8,
+      6,
+      4,
+      2
+    ],
+    "brainCosts": [
+      0,
+      100,
+      250,
+      600,
+      1500
+    ],
+    "antTypes": [
+      {
+        "id": "scout",
+        "name": "侦察蚁",
+        "initialCount": 5,
+        "emptyMoveUnitsPerTick": 200,
+        "loadedMoveUnitsPerTick": 20,
+        "carryCapacity": 1,
+        "visionCells": 6
+      },
+      {
+        "id": "hauler",
+        "name": "搬运蚁",
+        "initialCount": 5,
+        "emptyMoveUnitsPerTick": 120,
+        "loadedMoveUnitsPerTick": 60,
+        "carryCapacity": 1,
+        "visionCells": 3
+      },
+      {
+        "id": "soldier",
+        "name": "兵蚁",
+        "initialCount": 0,
+        "emptyMoveUnitsPerTick": 180,
+        "loadedMoveUnitsPerTick": 50,
+        "carryCapacity": 1,
+        "visionCells": 8,
+        "maxHealth": 40,
+        "attackDamage": 6,
+        "attackCooldownTicks": 10
+      },
+      {
+        "id": "chef",
+        "name": "厨师蚁",
+        "initialCount": 0,
+        "emptyMoveUnitsPerTick": 100,
+        "loadedMoveUnitsPerTick": 60,
+        "carryCapacity": 2,
+        "visionCells": 4,
+        "maxHealth": 16,
+        "workRate": 2
+      }
+    ],
+    "carryMultipliers": [
+      1,
+      2,
+      3,
+      4,
+      5,
+      6,
+      7,
+      8,
+      9,
+      10
+    ],
+    "carryUpgradeCosts": [
+      0,
+      80,
+      120,
+      180,
+      260,
+      360,
+      480,
+      620,
+      800,
+      1000
+    ],
+    "queenCommunicationCooldownTicks": 10,
+    "networkRanges": [
+      16,
+      24,
+      32,
+      48,
+      64
+    ],
+    "networkUpgradeCosts": [
+      0,
+      60,
+      160,
+      400,
+      1000
+    ],
+    "technologies": [
+      {
+        "id": "queen.communication",
+        "name": "蚁后信息收发",
+        "requiredNetworkLevel": 1
+      }
+    ],
+    "milestones": [
+      {
+        "id": "discover-5",
+        "title": "探路先锋",
+        "description": "发现 5 处天然食物",
+        "metric": "discovered_food",
+        "target": 5,
+        "prerequisites": [],
+        "timeLimitTicks": 0
+      },
+      {
+        "id": "deliver-50",
+        "title": "稳定供给",
+        "description": "累计送回 50 份食物",
+        "metric": "delivered",
+        "target": 50,
+        "prerequisites": [],
+        "timeLimitTicks": 0
+      },
+      {
+        "id": "population-20",
+        "title": "蚁群初成",
+        "description": "让蚁群达到 20 只",
+        "metric": "population",
+        "target": 20,
+        "prerequisites": [
+          "deliver-50"
+        ],
+        "timeLimitTicks": 0
+      },
+      {
+        "id": "network-3",
+        "title": "网络时代",
+        "description": "蚁群网络达到 Lv.3",
+        "metric": "network_level",
+        "target": 3,
+        "prerequisites": [
+          "discover-5"
+        ],
+        "timeLimitTicks": 0
+      },
+      {
+        "id": "supply-sprint",
+        "title": "运输冲刺",
+        "description": "解锁后 10 分钟内累计总交付达到 200",
+        "metric": "delivered",
+        "target": 200,
+        "prerequisites": [
+          "deliver-50"
+        ],
+        "timeLimitTicks": 12000
+      }
+    ],
+    "combat": {
+      "enabled": true,
+      "spawnIntervalTicks": 1200,
+      "enemyCap": 3,
+      "enemyHealth": 18,
+      "enemyDamage": 2,
+      "enemySpeed": 70,
+      "enemyVisionCells": 8,
+      "attackCooldownTicks": 20,
+      "queenHealth": 100,
+      "corpseMin": 1,
+      "corpseMax": 5
+    },
+    "production": {
+      "enabled": true,
+      "fruitSources": 8,
+      "fiberSources": 4,
+      "fruitCapacity": 5,
+      "growthTicks": 100,
+      "fiberCapacity": 30
+    }
+  }
+}

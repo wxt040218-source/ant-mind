@@ -20,3 +20,10 @@ bin/
 obj/
 TestResults/
 .vs/
+
+artifacts/
+
+# Runtime saves and Python cache
+saves/
+__pycache__/
+*.pyc

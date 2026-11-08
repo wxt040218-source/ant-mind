@@ -1,0 +1,17 @@
+// Injured guards return for explicit food consumption. No automatic healing.
+if (health < max_health && at_nest) {
+    if (nest_meat > 0) { eat(food_meat); }
+    else { eat(food_fruit); }
+} else if (health <= 12) {
+    move_to(nest_x, nest_y);
+} else if (nearest_enemy_id > 0) {
+    if (nearest_enemy_distance <= 1000) { attack(nearest_enemy_id); }
+    else { move_to(nearest_enemy_x, nearest_enemy_y); }
+} else if (group_id > 0) {
+    if (queen_connected) { request_queen_info(); }
+    if (group_order_version == 0) { move_to(nest_x,nest_y); }
+    else if (group_task == task_explore) { move_to(job_explore_x,job_explore_y); }
+    else { move_to(objective_x,objective_y); }
+} else {
+    move_to(nest_x + (ant_id % 3 - 1) * 2000, nest_y + (ant_id % 2 * 2 - 1) * 2000);
+}

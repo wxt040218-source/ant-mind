@@ -23,4 +23,4 @@
 - 每次实质进展同步到 `PROJECT_STATUS.md`。
 - 许可证与代码使用范围尚未确定，接入第三方代码或素材前先核对许可。
 
-当前没有运行命令或测试命令；添加可运行原型时补齐安装、启动和验证说明。
+运行与验证命令见 [框架说明](docs/FRAMEWORK.md)，规则扩展入口见 [规则扩展示例](docs/RULE_EXTENSION_EXAMPLE.md)，后续开发先读 [Luna 交接](docs/LUNA_HANDOFF.md)。

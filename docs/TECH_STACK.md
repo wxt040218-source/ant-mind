@@ -1,6 +1,10 @@
+> 本文保留早期设计记录。当前实现为 v0.13（四蚁种、生产链、完整存档、官方 MCP），请先读 AGENT_START_HERE.md、MVP_SPEC.md、PRODUCTION.md 和根目录 PROJECT_STATUS.md。旧章节中的未来功能、已停用接口和旧数值不当作当前事实。
+
+> 2026-11-07 更新：当前实施基线为 [v0.4 蚁后通信](MVP_SPEC.md)，操作接口见 [AGENT_API.md](AGENT_API.md)。信息素规则已取消；Agent 现可调用全部现有玩法按钮，包括 Visibility。
+
 # 无游戏引擎技术栈
 
-2026-11-05：根据发起人最新要求移除游戏引擎，采用 C# / .NET + Avalonia 桌面方案。玩法与可调初值继续以 [MVP_SPEC.md](MVP_SPEC.md) 为准；本文是技术规划，尚未建立源码工程。
+2026-11-05：根据发起人最新要求移除游戏引擎，采用 C# / .NET + Avalonia 桌面方案。玩法与可调初值继续以 [MVP_SPEC.md](MVP_SPEC.md) 为准；分层源码工程已建立；完成范围与未实现能力见 [框架说明](FRAMEWORK.md)。
 
 ## 技术选择
 
@@ -19,7 +23,7 @@
 
 Avalonia 提供桌面 UI 和绘图；模拟时钟、地图坐标、程序调度、规则与存档由项目实现。首版使用框架绘图 API，只有实测需要时才直接使用 SkiaSharp。无需游戏引擎、浏览器或引擎导出模板。
 
-.NET 10 是项目目标，不把本机已安装的 .NET 9 当作长期基线。Avalonia 与 MCP SDK 选择实现当时兼容 net10.0 的稳定版本，首次成功构建后提交 global.json、Directory.Packages.props 和 packages.lock.json；CI 使用锁定还原。当前尚未锁定包版本或验证构建。
+.NET 10 是项目目标，不把本机已安装的 .NET 9 当作长期基线。Avalonia 与 MCP SDK 选择实现当时兼容 net10.0 的稳定版本，首次成功构建后提交 global.json、Directory.Packages.props 和 packages.lock.json；CI 使用锁定还原。现已固定 Avalonia 12.1.5、官方 MCP SDK 2.3.1，并生成各工程锁文件；整套 Debug 构建已通过。
 
 ## 模块与贡献入口
 
@@ -42,7 +46,7 @@ assets/                原创像素素材
 docs/
 ```
 
-目录是规划，尚未创建。日常扩展优先通过 JSON 内容或普通 C# 项目引用完成，新增行为通过明确接口注册。首版不加入动态 DLL 热加载或通用插件市场。多人协作可以分别负责核心规则、解释器、桌面界面和 MCP 适配。
+主体目录已建立，另有 Transport 适配层与 tools/AntMind.Checks 架构验收工具；规划中的完整测试目录和素材尚未创建。日常扩展优先通过 JSON 内容或普通 C# 项目引用完成，新增行为通过明确接口注册。首版不加入动态 DLL 热加载或通用插件市场。多人协作可以分别负责核心规则、解释器、桌面界面和 MCP 适配。
 
 ## 性能与分发
 

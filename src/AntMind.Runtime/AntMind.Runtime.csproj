@@ -1,0 +1,1 @@
+<Project Sdk="Microsoft.NET.Sdk"><PropertyGroup></PropertyGroup><ItemGroup><ProjectReference Include="../../src/AntMind.Contracts/AntMind.Contracts.csproj"/><ProjectReference Include="../../src/AntMind.Core/AntMind.Core.csproj"/><ProjectReference Include="../../src/AntMind.Programs/AntMind.Programs.csproj"/></ItemGroup></Project>
