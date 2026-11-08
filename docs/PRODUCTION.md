@@ -54,3 +54,7 @@
 本轮只完成 M0～M3 的首个可运行闭环；完整调研规划中的能力科技、身体模块、昼夜环境与开拓属于 M4／M5，尚未开发。下一步优先更完整的多种子生产物流评估、长期数据量和观测分页，再扩展配方与内容。
 
 补记：最终页签字体调整后 Desktop 构建成功；用户按 Esc 停止了后续界面自动化，因此未继续鼠标操作。现无运行中的游戏；production-demo 已复制到 quick 快速槽供重启后继续。
+
+## GitHub 交付验证
+
+源码提交 593d2eeb9bcbbaa604b61e63f20e8e3e76008efd 已同步 main。[Windows CI run 42499250758](https://github.com/ytzha/ant-mind/actions/runs/42499250758) 在干净环境成功还原锁定依赖、构建、运行完整检查并发布 Release win-x64 自包含桌面版。当前内容与 Agent 阅读顺序见 AGENT_START_HERE.md；本机存档和生成物不在 Git 中。
