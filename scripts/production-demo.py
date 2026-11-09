@@ -16,10 +16,14 @@ ROOT = Path(__file__).resolve().parents[1]
 
 def main():
     env = os.environ.copy()
-    exe = ROOT / ".tools/dotnet/dotnet.exe"
-    process = subprocess.Popen([str(exe) if exe.exists() else "dotnet", str(ROOT / "src/AntMind.Mcp/bin/Debug/net10.0/AntMind.Mcp.dll")],
-        cwd=ROOT, env=env, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL,
-        text=True, encoding="utf-8", creationflags=subprocess.CREATE_NO_WINDOW)
+    dotnet_exe = "dotnet.exe" if os.name == "nt" else "dotnet"
+    exe = ROOT / ".tools/dotnet" / dotnet_exe
+    popen_kwargs = dict(cwd=ROOT, env=env, stdin=subprocess.PIPE, stdout=subprocess.PIPE,
+                        stderr=subprocess.DEVNULL, text=True, encoding="utf-8")
+    if os.name == "nt":
+        popen_kwargs["creationflags"] = subprocess.CREATE_NO_WINDOW
+    process = subprocess.Popen([str(exe) if exe.exists() else dotnet_exe,
+        str(ROOT / "src/AntMind.Mcp/bin/Debug/net10.0/AntMind.Mcp.dll")], **popen_kwargs)
     replies = queue.Queue()
     def receive():
         for line in process.stdout:

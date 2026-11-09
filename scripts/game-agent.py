@@ -47,15 +47,20 @@ def main():
         parser.error("--source is required")
     if args.operation == "command" and not args.kind:
         parser.error("--kind is required")
-    runtime = ROOT / ".tools/dotnet/dotnet.exe"
+    dotnet_exe = "dotnet.exe" if os.name == "nt" else "dotnet"
+    runtime = ROOT / ".tools/dotnet" / dotnet_exe
     env = os.environ.copy()
     if runtime.exists():
         env["DOTNET_ROOT"] = str(runtime.parent)
     env.setdefault("ANTMIND_PIPE", "antmind-v1")
+    # creationflags 只在 Windows 有效；Linux 下传非零值会抛 ValueError
+    popen_kwargs = dict(cwd=ROOT, env=env, stdin=subprocess.PIPE, stdout=subprocess.PIPE,
+                        stderr=subprocess.DEVNULL, text=True, encoding="utf-8")
+    if os.name == "nt":
+        popen_kwargs["creationflags"] = subprocess.CREATE_NO_WINDOW
     process = subprocess.Popen(
-        [str(runtime) if runtime.exists() else "dotnet", str(ROOT / "src/AntMind.Mcp/bin/Debug/net10.0/AntMind.Mcp.dll")],
-        cwd=ROOT, env=env, stdin=subprocess.PIPE, stdout=subprocess.PIPE,
-        stderr=subprocess.DEVNULL, text=True, encoding="utf-8", creationflags=subprocess.CREATE_NO_WINDOW)
+        [str(runtime) if runtime.exists() else dotnet_exe, str(ROOT / "src/AntMind.Mcp/bin/Debug/net10.0/AntMind.Mcp.dll")],
+        **popen_kwargs)
     replies = queue.Queue()
 
     def receive():
