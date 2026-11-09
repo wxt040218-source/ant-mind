@@ -1,0 +1,31 @@
+# VERSION=0.1.0
+# Ant Mind headless Linux 容器编排（WXT 的 Linux 移植）
+# 归属工作区：zcode-game；归属单元（stack）：/opt/stacks/ant-mind-linux/
+# 配额已申请并登记：运维区 commit f7ad749（1 容器，mem_limit=memswap_limit=2g）。
+# 部署：把本仓库 clone 到 /opt/stacks/ant-mind-linux/ 后，在该目录执行 docker compose up -d --build。
+# 说明：headless 版只跑确定性核心，host(Evaluator --serve) 与 client(MCP) 走 /tmp 下的 UDS，
+#       不监听任何 TCP 端口，因此本服务无 ports:，也不生成 Homepage 卡片（不需要统一入口）。
+services:
+  ant-mind-linux:
+    build: .
+    image: ant-mind-linux:0.1.0
+    container_name: ant-mind-linux
+    restart: unless-stopped
+    # 内存与 swap 上限相等：撞顶由 cgroup OOM kill，再由 unless-stopped 拉起，不静默换页拖累全局。
+    mem_limit: 2g
+    memswap_limit: 2g
+    environment:
+      TZ: Asia/Shanghai
+      # UDS 管道名；bridge / Checks 必须与宿主同名、且同 UID/同 TMPDIR/同 mount namespace。
+      ANTMIND_PIPE: antmind-v1
+    volumes:
+      # 存档落 HDD（Digital Base 分层规则：数据进 /data，不进 SSD）。
+      # SavedGames.DefaultDirectory = AppContext.BaseDirectory/saves，正对 Evaluator.dll 的输出目录。
+      - /data/100_AppData/ant-mind-linux/saves:/app/tools/AntMind.Evaluator/bin/Debug/net10.0/saves
+    # 四件套之「日志轮转」：json-file 10m × 3，防止无限增长吃满 /。
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+    # 端口绑 IP 一项：本服务不暴露端口（N/A）。无任何 ports: 声明，容器不监听 TCP。

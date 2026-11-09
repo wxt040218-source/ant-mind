@@ -27,3 +27,6 @@ artifacts/
 saves/
 __pycache__/
 *.pyc
+
+# 本机验证用的临时缓存（MSBuild/NuGet/dotnet home 重定向目录），不入库
+.tmp-*/
