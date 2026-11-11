@@ -23,11 +23,7 @@ public sealed record CombatConfig {
 }
 public static class CombatMath {
     public static long Distance(Point a, Point b) => Math.Max(Math.Abs((long)a.X-b.X),Math.Abs((long)a.Y-b.Y));
-    public static Point Move(Point from, Point target, int speed) {
-        var dx=Math.Clamp(target.X-from.X,-speed,speed);
-        var dy=Math.Clamp(target.Y-from.Y,-(speed-Math.Abs(dx)),speed-Math.Abs(dx));
-        return new(from.X+dx,from.Y+dy);
-    }
+    public static Point Move(Point from,Point target,int speed)=>PointMath.Towards(from,target,speed);
 }
 public sealed class EnemySpawnRule : IWorldRule {
     public string Id => "core.enemy-spawn";
@@ -79,8 +75,10 @@ public sealed class CombatRule : IWorldRule {
             var error=type.AttackDamage==0 ? "cannot_attack" : world.Tick-ant.LastAttackTick<type.AttackCooldownTicks ? "attack_cooldown" :
                 enemy is null || enemy.Health<=0 ? "enemy_not_found" : CombatMath.Distance(ant.Position,enemy.Position)>Point.UnitsPerCell ? "enemy_out_of_reach" : null;
             if (error is null) {
-                enemy=enemy! with { Health=Math.Max(0,enemy!.Health-type.AttackDamage) };
+                world=AntProgression.Record(world,ant.Id,world.Config.Veterancy.HitExperience,"attack");
+                enemy=enemy! with { Health=Math.Max(0,enemy!.Health-AntProgression.AttackDamage(world,ant)) };
                 if (enemy.Health==0) {
+                    world=AntProgression.Record(world,ant.Id,world.Config.Veterancy.KillExperience,"kill");
                     var corpseId=world.NextResourceId;
                     world=AddFood(world,enemy.Position,enemy.FoodAmount,ResourceOrigin.Carcass,FoodTypes.Meat,enemy.Id);
                     enemy=enemy with { CorpseFoodId=corpseId };

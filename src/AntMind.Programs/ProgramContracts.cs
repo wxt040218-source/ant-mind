@@ -10,7 +10,16 @@ public sealed record Perception(int AntId, long Tick, Point Position, Point Nest
     ImmutableArray<ResourceView> QueenResources = default, long QueenInfoTick = -1,
     ActionStatus ActionStatus = ActionStatus.None, ActionStatus QueenRequestStatus = ActionStatus.None,
     ActionStatus QueenReportStatus = ActionStatus.None) {
+    public int Level {get;init;}=1;
+    public int Experience {get;init;}
+    public int ExperienceToNext {get;init;}
+    public int MovePercent {get;init;}=100;
+    public int WorkPercent {get;init;}=100;
+    public int AttackDamage {get;init;}
+    public int TechnologyLevel {get;init;}=1;
+    public ImmutableArray<RecipeDefinition> Recipes {get;init;}=[];
     public ImmutableArray<SourceView> Sources {get;init;}=[];
+    public ImmutableArray<BuildingDefinition> BuildingTypes {get;init;}=[];
     public ImmutableArray<BuildingView> Buildings {get;init;}=[];
     public ImmutableArray<SourceView> QueenSources {get;init;}=[];
     public ImmutableArray<BuildingView> QueenBuildings {get;init;}=[];
@@ -31,6 +40,7 @@ public sealed record Decision(string Branch, int Spent, Point? Target, AntAction
     bool RequestQueenInfo = false, bool ReportDiscovery = false) {
     public ProductionIntent Production {get;init;}=new();
     public string EatFood { get; init; } = FoodTypes.Fruit;
+    public int EatHolderId {get;init;}=-1;
     public int PickupFoodId { get; init; }
     public int FollowAntId { get; init; }
     public int FollowDistance { get; init; }

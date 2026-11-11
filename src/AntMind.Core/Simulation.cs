@@ -4,6 +4,7 @@ namespace AntMind.Core;
 public sealed record TechnologyConfig(string Id, string Name, int RequiredNetworkLevel);
 public sealed record AntTypeConfig(string Id, string Name, int InitialCount, int EmptyMoveUnitsPerTick,
     int LoadedMoveUnitsPerTick, int CarryCapacity, int VisionCells) {
+    public int RequiredNetworkLevel {get;init;}=1;
     public int WorkRate {get;init;}=1;
     public int MaxHealth { get; init; } = 12;
     public int AttackDamage { get; init; }
@@ -16,6 +17,7 @@ public sealed record WorldConfig(int Width = 64, int Height = 64, int InitialAnt
     int ResourceNodeCap = 20, int GroundResourceCap = 1200, int ResourceRefreshTicks = 100,
     int NestExclusionCells = 4, int InteractionCooldownTicks = 10)
 {
+    public VeterancyConfig Veterancy {get;init;}=new();
     public ProductionConfig Production {get;init;}=new();
     public CombatConfig Combat { get; init; } = new();
     public int EatingTicks { get; init; } = 40;
@@ -26,6 +28,7 @@ public sealed record WorldConfig(int Width = 64, int Height = 64, int InitialAnt
     public int QueenCommunicationCooldownTicks { get; init; } = 10;
     public ImmutableArray<int> NetworkRanges { get; init; } = [16, 24, 32, 48, 64];
     public ImmutableArray<int> NetworkUpgradeCosts { get; init; } = [0, 60, 160, 400, 1000];
+    public ImmutableArray<TechnologyEra> TechnologyEras {get;init;}=[new(1,"基础采运","探索、运输和中转"),new(2,"集体分工","厨房、厨师与水果加工"),new(3,"蛋白料理","肉类精加工"),new(4,"均衡营养","组合多种食材"),new(5,"蚁王盛宴","高级食物深加工")];
     public ImmutableArray<TechnologyConfig> Technologies { get; init; } = [new("queen.communication", "蚁后信息收发", 1)];
     public ImmutableArray<AntTypeConfig> AntTypes { get; init; } = [
         new(AntMind.Contracts.AntSpeciesIds.Scout, "侦察蚁", 5, 200, 20, 1, 6),
@@ -36,11 +39,14 @@ public sealed record WorldConfig(int Width = 64, int Height = 64, int InitialAnt
     public ImmutableArray<int> BrainIntervals { get; init; } = [10, 8, 6, 4, 2];
     public ImmutableArray<int> BrainCosts { get; init; } = [0, 100, 250, 600, 1500];
     public void Validate() {
+        Veterancy.Validate();
         MilestoneRule.Validate(Milestones);
         Combat.Validate();
-        Production.Validate(Foods);
+        Production.Validate(Foods,NetworkRanges.Length);
+        if(Production.Enabled && Production.Buildings.Any(b=>!AntTypes.Any(a=>a.Id==b.BuilderSpecies)))throw new ArgumentException("Unknown construction profession.");
+        if(TechnologyEras.IsDefault || TechnologyEras.Any(x=>x.Level<1 || x.Level>NetworkRanges.Length || string.IsNullOrWhiteSpace(x.Name)) || TechnologyEras.Select(x=>x.Level).Distinct().Count()!=TechnologyEras.Length)throw new ArgumentException("Invalid technology eras.");
         if (EatingTicks < 1 || EatingTicks > 1200 || Foods.IsDefaultOrEmpty || Foods.Length > 32 ||
-            Foods.Any(x=>x is null || string.IsNullOrWhiteSpace(x.Id) || x.Id.Length>40 || string.IsNullOrWhiteSpace(x.Name) || x.HealAmount is <0 or >1000 || x.Edible && x.HealAmount<1 || x.UnitMass!=1) ||
+            Foods.Any(x=>x is null || string.IsNullOrWhiteSpace(x.Id) || x.Id.Length>40 || string.IsNullOrWhiteSpace(x.Name) || x.HealAmount is <0 or >1000 || x.Edible && x.HealAmount<1 || x.UnitMass!=1 || x.Value is <0 or >1000000 || x.Edible && x.Value<1) ||
             Foods.Select(x=>x.Id).Distinct(StringComparer.Ordinal).Count()!=Foods.Length ||
             !Foods.Any(x=>x.Id==FoodTypes.Fruit) || !Foods.Any(x=>x.Id==FoodTypes.Meat)) throw new ArgumentException("Invalid food configuration.");
         if (NetworkRanges.IsDefaultOrEmpty || NetworkUpgradeCosts.IsDefaultOrEmpty ||
@@ -68,7 +74,7 @@ public sealed record WorldConfig(int Width = 64, int Height = 64, int InitialAnt
             !AntTypes.Any(x => x.Id == AntMind.Contracts.AntSpeciesIds.Scout) ||
             !AntTypes.Any(x => x.Id == AntMind.Contracts.AntSpeciesIds.Hauler) ||
             AntTypes.Any(x => string.IsNullOrWhiteSpace(x.Id) || string.IsNullOrWhiteSpace(x.Name) ||
-                x.WorkRate is <1 or >10 || x.InitialCount < 0 || x.EmptyMoveUnitsPerTick is < 1 or > 1000 ||
+                x.RequiredNetworkLevel<1 || x.RequiredNetworkLevel>NetworkRanges.Length || x.WorkRate is <1 or >10 || x.InitialCount < 0 || x.EmptyMoveUnitsPerTick is < 1 or > 1000 ||
                 x.LoadedMoveUnitsPerTick is < 1 or > 1000 || x.LoadedMoveUnitsPerTick > x.EmptyMoveUnitsPerTick ||
                 x.MaxHealth is < 1 or > 10000 || x.AttackDamage is < 0 or > 1000 || x.AttackCooldownTicks < 1 ||
                 x.CarryCapacity is < 1 or > 100 || x.VisionCells is < 1 or > 16) ||
@@ -86,6 +92,8 @@ public sealed record WorldState {
         Objects = new EntityDatabase().Put(new QueenObject(1, Point.FromCells(config.Width / 2, config.Height / 2)) { Health = config.Combat.QueenHealth, MaxHealth = config.Combat.QueenHealth })
             .ReplaceAnts(ants).ReplaceActiveFood(resources);
     }
+    public ImmutableHashSet<int> ExploredCells {get;init;}=ImmutableHashSet<int>.Empty;
+    public ImmutableArray<ExperienceEvent> PendingExperience {get;init;}=[];
     public long Tick { get; init; }
     public ulong RandomState { get; init; }
     public WorldConfig Config { get; init; }
@@ -111,6 +119,10 @@ public sealed record WorldState {
     public ImmutableArray<EconomyEvent> EconomyEvents {get;init;}=[];
     public ImmutableDictionary<string,long> CreatedItems {get;init;}=ImmutableDictionary<string,long>.Empty;
     public ImmutableDictionary<string,long> ConsumedItems {get;init;}=ImmutableDictionary<string,long>.Empty;
+    public long StoredFoodValue=>Stock.FoodValue(Config.Foods);
+    public long DevelopmentValue=>checked(StoredFoodValue+DevelopmentChange);
+    public long DevelopmentChange {get;init;}
+    public long ProcessingValueAdded {get;init;}
     public long FoodEaten { get; init; }
     public long HealthRestored { get; init; }
     public ImmutableArray<GroupOrder> Groups { get; init; } = [];
@@ -175,6 +187,7 @@ public sealed class Simulation {
             DeliveredBySpecies = config.AntTypes.ToImmutableDictionary(x => x.Id, _ => 0L, StringComparer.Ordinal),
             ActiveProgramVersions = config.AntTypes.ToImmutableDictionary(x => x.Id, _ => 0, StringComparer.Ordinal)
             };
+        world=world with {ExploredCells=ants.Select(a=>AntProgression.Cell(config,a.Position)).ToImmutableHashSet()};
         world=Economy.Created(world,FoodTypes.Fruit,config.InitialStock);
         for (int i = 0; i < config.InitialResourceNodes; i++) world = ResourcePlacement.TryAdd(world);
         if (world.Resources.Length != config.InitialResourceNodes)

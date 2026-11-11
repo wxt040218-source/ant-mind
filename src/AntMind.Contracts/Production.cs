@@ -22,9 +22,20 @@ public sealed record SourceView(int Id,Point Position,string ItemType,int Amount
     public long LastObservedTick {get;init;}=-1;
     public ImmutableDictionary<string,string> Properties {get;init;}=ImmutableDictionary<string,string>.Empty;
 }
-public sealed record RecipeDefinition(int Code,string Id,string Name,string Input,int InputCount,string Output,int OutputCount,int WorkTicks,int RequiredNetworkLevel=1);
-public sealed record BuildingDefinition(string Id,string Name,int FiberCost,int BuildTicks,int Capacity,int RequiredNetworkLevel=1);
+public sealed record RecipeDefinition(int Code,string Id,string Name,string Input,int InputCount,string Output,int OutputCount,int WorkTicks,int RequiredNetworkLevel=1) {
+    public ImmutableDictionary<string,int> ExtraInputs {get;init;}=ImmutableDictionary<string,int>.Empty;
+    public string BuildingType {get;init;}="workshop";
+    public ImmutableDictionary<string,int> Ingredients()=>ExtraInputs.Add(Input,InputCount);
+}
+public sealed record BuildingDefinition(string Id,string Name,int MaterialCost,int BuildTicks,int Capacity,int RequiredNetworkLevel=1) {
+    public bool CanFeedAnts {get;init;}
+    public string MaterialType {get;init;}=FoodTypes.Wood;
+    public string BuilderSpecies {get;init;}=AntSpeciesIds.Builder;
+}
 public sealed record BuildingView(int Id,Point Position,string Type) : IWorldObject {
+    // A plan keeps its material contract even when future content definitions change.
+    // Empty uses the definition; legacy sites explicitly keep fiber.
+    public string ConstructionItem {get;init;}="";
     public string Kind=>"building";
     public string Phase {get;init;}="blueprint";
     public FoodStore Store {get;init;}=new();
@@ -40,10 +51,15 @@ public sealed record BuildingView(int Id,Point Position,string Type) : IWorldObj
 public sealed record ProductionIntent(int ObjectId=0,string ItemType="",int Quantity=0,int RecipeCode=0);
 public sealed record EconomyEvent(long Tick,string Metric,string Item,long Quantity,int AntId,string Species,int GroupId);
 public sealed record EconomyStats(long WindowTicks,long FirstAdmissionPoints,double PointsPerMinute,ImmutableDictionary<string,long> Harvested,ImmutableDictionary<string,long> Produced,ImmutableDictionary<string,long> Actions,ImmutableDictionary<string,long> Failures) {
+    public long ProcessingValueAdded {get;init;}
+    public double ValueAddedPerMinute {get;init;}
     public ImmutableDictionary<string,long> PointsBySpecies {get;init;}=ImmutableDictionary<string,long>.Empty;
     public ImmutableDictionary<int,long> PointsByGroup {get;init;}=ImmutableDictionary<int,long>.Empty;
 }
 
 public sealed record EvaluationRequest(string Slot,int Ticks,string Species="",string Source="");
-public sealed record EvaluationBranch(long StartTick,long EndTick,long NewFoodPoints,long GrossDelivered,int AntsLost,int ProgramErrors,ImmutableDictionary<string,long> InventoryDelta);
+public sealed record EvaluationBranch(long StartTick,long EndTick,long NewFoodPoints,long GrossDelivered,int AntsLost,int ProgramErrors,ImmutableDictionary<string,long> InventoryDelta) {
+    public long ProcessingValueAdded {get;init;}
+    public long DevelopmentValueDelta {get;init;}
+}
 public sealed record EvaluationReport(string Slot,int Ticks,EvaluationBranch Baseline,EvaluationBranch Candidate);

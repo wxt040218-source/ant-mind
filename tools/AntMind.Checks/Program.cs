@@ -198,7 +198,7 @@ Check(harvestWorld.Resources.Length <= 20 && harvestWorld.Resources.Sum(r => r.A
     "resource and per-species carrying caps hold");
 var configured = ContentLoader.LoadDefault();
 Check(configured.BrainBudgets.SequenceEqual(new[] { 64, 128, 256, 512, 1024 }) &&
-    configured.ResourceRefreshTicks == 300 && configured.AntTypes.Length == 4 && configured.Production.Enabled && configured.AntTypes.Single(x=>x.Id==AntSpeciesIds.Chef).WorkRate==2,
+    configured.ResourceRefreshTicks == 300 && configured.AntTypes.Length == 5 && configured.Production.Enabled && configured.AntTypes.Single(x=>x.Id==AntSpeciesIds.Chef).WorkRate==2,
     "versioned content loads shared and per-species prototype values");
 await using (var programmable = new GameSession(new WorldConfig(InitialResourceNodes: 0), 17)) {
     var initial = await programmable.ObserveAsync();
@@ -484,6 +484,14 @@ await using (var presenceSession = new GameSession(new WorldConfig(InitialResour
     Check(!(await presenceSession.ObserveAsync()).AgentConnected,
         "stale MCP heartbeat expires even while simulation is paused");
 }
+await AgentMcpCheck.Run(Check);
+await AgentDiagnosticsCheck.Run(Check);
+await PriorityFixCheck.Run(Check);
+OutpostCheck.Run(Check);
+await FreeMovementCheck.Run(Check);
+await ConstructionCheck.Run(Check);
+await AntProgressionCheck.Run(Check);
+await TechnologyValueCheck.Run(Check);
 await ProductionCheck.Run(Check);
 CombatCheck.Run(Check);
 await ColonyCheck.Run(Check);

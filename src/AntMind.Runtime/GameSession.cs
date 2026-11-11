@@ -6,7 +6,7 @@ using AntMind.Programs;
 namespace AntMind.Runtime;
 // The actor owns all writes. Immutable snapshots are the only state crossing this boundary.
 public sealed partial class GameSession : IAsyncDisposable {
-    private sealed record Request(GameCommand? Command, TaskCompletionSource<object> Completion, bool Player, AgentPresence? Agent = null);
+    private sealed record Request(GameCommand? Command, TaskCompletionSource<object> Completion, bool Player, AgentPresence? Agent = null,Func<object>? Query=null);
     private readonly Channel<Request> queue = Channel.CreateBounded<Request>(new BoundedChannelOptions(256) { SingleReader = true, FullMode = BoundedChannelFullMode.Wait });
     private readonly Dictionary<Guid, (GameCommand Command, CommandResult Result)> receipts = [];
     private readonly Dictionary<Guid, (string Name, long Timestamp)> agentSessions = [];
@@ -24,6 +24,7 @@ public sealed partial class GameSession : IAsyncDisposable {
         world = new MilestoneRule().Apply(Simulation.Create(config, seed));
         programCatalog = new(config.AntTypes.Select(x => x.Id));
         simulation = GameRules.Create(programCatalog,extraRules);
+        eventJournal.Reset(worldId,AgentFrame());
         actor = RunAsync();
     }
     public async Task<Snapshot> ObserveAsync(bool player = false, CancellationToken ct = default) => (Snapshot)await Submit(null, player, ct);
@@ -47,7 +48,7 @@ public sealed partial class GameSession : IAsyncDisposable {
                     if (!await ready) break;
                     // Bound command work so a continuous caller cannot starve simulation ticks.
                     for (int n = 0; n < 64 && queue.Reader.TryRead(out var request); n++) {
-                        try { request.Completion.SetResult(request.Agent is { } agent ? UpdatePresence(agent) : request.Command is null ? Project(request.Player) : Apply(request.Command)); }
+                        try { request.Completion.SetResult(request.Query is {} query?query():request.Agent is { } agent ? UpdatePresence(agent) : request.Command is null ? Project(request.Player) : ApplyAndNotify(request.Command)); }
                         catch (Exception ex) { request.Completion.SetException(ex); }
                     }
                     ready = queue.Reader.WaitToReadAsync().AsTask();
@@ -75,7 +76,7 @@ public sealed partial class GameSession : IAsyncDisposable {
         if(command.ExpectedRevision==revision && (command.Kind is CommandKind.SaveGame or CommandKind.LoadGame || !world.IsDefeated && command.Kind is CommandKind.PlanBuild or CommandKind.CancelBuild)) {
             result=ApplyProductionCommand(command);receipts.Add(command.RequestId,(command,result));return result;
         }
-        if(command.ExpectedRevision==revision && !world.IsDefeated && command.Kind is CommandKind.CreateGroup or CommandKind.UpdateGroup or CommandKind.DeleteGroup or CommandKind.AssignAnt or CommandKind.AssignAnts or CommandKind.SetGroupParameter or CommandKind.RemoveGroupParameter or CommandKind.SetGroupPoint or CommandKind.RemoveGroupPoint) {
+        if(command.ExpectedRevision==revision && !world.IsDefeated && command.Kind is CommandKind.ConfigureGroup or CommandKind.CreateGroup or CommandKind.UpdateGroup or CommandKind.DeleteGroup or CommandKind.AssignAnt or CommandKind.AssignAnts or CommandKind.SetGroupParameter or CommandKind.RemoveGroupParameter or CommandKind.SetGroupPoint or CommandKind.RemoveGroupPoint) {
             result=ApplyGroupCommand(command); receipts.Add(command.RequestId,(command,result));return result;
         }
         if (command.ExpectedRevision != revision) result = Reject("revision_conflict");
@@ -100,27 +101,28 @@ public sealed partial class GameSession : IAsyncDisposable {
             result = new(command.RequestId, false, rollbackError, revision);
         else if (command.Kind == CommandKind.Recruit) result = Reject("recruit_replaced_by_eggs");
         else if (command.Kind == CommandKind.HatchEgg && !world.Config.AntTypes.Any(x => x.Id == command.Species)) result = Reject("invalid_species");
+        else if (command.Kind == CommandKind.HatchEgg && world.NetworkLevel<world.Config.AntType(command.Species).RequiredNetworkLevel) result=Reject("technology_locked");
         else if (command.Kind == CommandKind.HatchEgg && world.Ants.Length >= world.Config.PopulationCap) result = Reject("population_cap");
         else if (command.Kind == CommandKind.HatchEgg && world.Eggs < 1) result = Reject("no_eggs");
         else if (command.Kind == CommandKind.ProduceEgg && world.EggsProduced == int.MaxValue) result = Reject("egg_capacity");
         else if (command.Kind == CommandKind.ProduceEgg &&
-            world.Inventory - world.Config.RecruitmentCost < world.Config.MinimumReserve) result = Reject("insufficient_stock");
+            world.DevelopmentValue - world.Config.RecruitmentCost < world.Config.MinimumReserve) result = Reject("insufficient_stock");
         else if (command.Kind == CommandKind.UpgradeCarry && command.Species != AntSpeciesIds.Hauler) result = Reject("carry_upgrade_species");
         else if (command.Kind == CommandKind.UpgradeCarry && world.HaulerCarryLevel >= world.Config.CarryMultipliers.Length) result = Reject("max_carry_level");
-        else if (command.Kind == CommandKind.UpgradeCarry && world.Inventory - world.Config.CarryUpgradeCosts[world.HaulerCarryLevel] < world.Config.MinimumReserve) result = Reject("insufficient_stock");
+        else if (command.Kind == CommandKind.UpgradeCarry && world.DevelopmentValue - world.Config.CarryUpgradeCosts[world.HaulerCarryLevel] < world.Config.MinimumReserve) result = Reject("insufficient_stock");
         else if (command.Kind == CommandKind.UpgradeNetwork && world.NetworkLevel >= world.Config.NetworkRanges.Length) result = Reject("max_network_level");
-        else if (command.Kind == CommandKind.UpgradeNetwork && world.Inventory - world.Config.NetworkUpgradeCosts[world.NetworkLevel] < world.Config.MinimumReserve) result = Reject("insufficient_stock");
+        else if (command.Kind == CommandKind.UpgradeNetwork && world.DevelopmentValue - world.Config.NetworkUpgradeCosts[world.NetworkLevel] < world.Config.MinimumReserve) result = Reject("insufficient_stock");
         else if (command.Kind == CommandKind.UpgradeBrain && world.BrainLevel >= world.Config.BrainBudgets.Length)
             result = Reject("max_brain_level");
         else if (command.Kind == CommandKind.UpgradeBrain &&
-            world.Inventory - world.Config.BrainCosts[world.BrainLevel] < world.Config.MinimumReserve)
+            world.DevelopmentValue - world.Config.BrainCosts[world.BrainLevel] < world.Config.MinimumReserve)
             result = Reject("insufficient_stock");
         else {
-            var stockBefore=world.Stock;
             switch(command.Kind) {
                 case CommandKind.UpgradeNetwork:
                     var networkCost = world.Config.NetworkUpgradeCosts[world.NetworkLevel];
-                    world = world with { NetworkLevel = world.NetworkLevel + 1, Stock = world.Stock.SpendFood(networkCost,world.Config.Foods),
+                    world=TechnologyProgression.Pay(world,networkCost);
+                    world = world with { NetworkLevel = world.NetworkLevel + 1,
                         NetworkUpgradeSpent = checked(world.NetworkUpgradeSpent + networkCost) };
                     break;
                 case CommandKind.SetMinimumReserve: world = world with { Config = world.Config with { MinimumReserve = command.Value } }; break;
@@ -130,8 +132,8 @@ public sealed partial class GameSession : IAsyncDisposable {
                 case CommandKind.Step: Advance(); break;
                 case CommandKind.Speed: speed = command.Value; break;
                 case CommandKind.ProduceEgg:
+                    world=TechnologyProgression.Pay(world,world.Config.RecruitmentCost);
                     world = world with { Eggs = checked(world.Eggs + 1), EggsProduced = checked(world.EggsProduced + 1),
-                        Stock = world.Stock.SpendFood(world.Config.RecruitmentCost,world.Config.Foods),
                         RecruitmentSpent = checked(world.RecruitmentSpent + world.Config.RecruitmentCost) };
                     break;
                 case CommandKind.HatchEgg:
@@ -144,19 +146,20 @@ public sealed partial class GameSession : IAsyncDisposable {
                     break;
                 case CommandKind.UpgradeCarry:
                     var carryCost = world.Config.CarryUpgradeCosts[world.HaulerCarryLevel];
+                    world=TechnologyProgression.Pay(world,carryCost);
                     world = world with { HaulerCarryLevel = world.HaulerCarryLevel + 1,
-                        Stock = world.Stock.SpendFood(carryCost,world.Config.Foods), CarryUpgradeSpent = checked(world.CarryUpgradeSpent + carryCost) };
+                        CarryUpgradeSpent = checked(world.CarryUpgradeSpent + carryCost) };
                     break;
                 case CommandKind.UpgradeBrain:
                     var cost = world.Config.BrainCosts[world.BrainLevel];
-                    world = world with { BrainLevel = world.BrainLevel + 1, Stock = world.Stock.SpendFood(cost,world.Config.Foods),
+                    world=TechnologyProgression.Pay(world,cost);
+                    world = world with { BrainLevel = world.BrainLevel + 1,
                         UpgradeSpent = checked(world.UpgradeSpent + cost) };
                     break;
                 case CommandKind.ApplyProgram:
                 case CommandKind.RollbackProgram:
                     break; // The catalog activates queued changes at the next simulation Tick boundary.
             }
-            foreach(var entry in stockBefore.Amounts) {var spent=entry.Value-world.Stock.Get(entry.Key);if(spent>0)world=Economy.Consumed(world,entry.Key,spent);}
             world = new MilestoneRule().Apply(world);
             if (command.Kind != CommandKind.Step) revision++;
             result = new(command.RequestId, true, "applied", revision);
@@ -167,6 +170,7 @@ public sealed partial class GameSession : IAsyncDisposable {
         world=GameRules.Activate(world,programCatalog);
         world = simulation.Step(world); revision++;
         if (world.IsDefeated) paused = true;
+        eventJournal.Observe(AgentFrame());
     }
     private bool UpdatePresence(AgentPresence agent) {
         RemoveExpiredAgents();
@@ -189,7 +193,7 @@ public sealed partial class GameSession : IAsyncDisposable {
             new AntSpeciesSnapshot(type.Id, type.Name, type.EmptyMoveUnitsPerTick, type.LoadedMoveUnitsPerTick,
                 world.CarryCapacity(type.Id), type.VisionCells, world.Ants.Count(a => a.Species == type.Id),
                 world.DeliveredBySpecies.GetValueOrDefault(type.Id)) {
-                WorkRate=type.WorkRate,MaxHealth = type.MaxHealth, AttackDamage = type.AttackDamage,
+                RequiredNetworkLevel=type.RequiredNetworkLevel,Unlocked=world.NetworkLevel>=type.RequiredNetworkLevel,WorkRate=type.WorkRate,MaxHealth = type.MaxHealth, AttackDamage = type.AttackDamage,
                 CarryLevel = type.Id == AntSpeciesIds.Hauler ? world.HaulerCarryLevel : 1,
                 NextCarryUpgradeCost = type.Id == AntSpeciesIds.Hauler && world.HaulerCarryLevel < world.Config.CarryMultipliers.Length ? world.Config.CarryUpgradeCosts[world.HaulerCarryLevel] : 0,
                 NextCarryCapacity = type.Id == AntSpeciesIds.Hauler && world.HaulerCarryLevel < world.Config.CarryMultipliers.Length ? checked(type.CarryCapacity * world.Config.CarryMultipliers[world.HaulerCarryLevel]) : 0
@@ -199,9 +203,9 @@ public sealed partial class GameSession : IAsyncDisposable {
             world.Inventory, world.Delivered, null, world.BrainLevel,
             world.RecruitmentSpent, world.UpgradeSpent, species, programCatalog.Snapshot(), world.QueenRangeCells,
             world.QueenResources.Where(x => x.Amount > 0).ToImmutableArray()) {
-                WorldId=worldId,FirstAdmissionPoints=world.FirstAdmissionPoints,Economy=Economy.Stats(world),
+                AntLevels=world.Config.Veterancy.Definitions(),TechnologyEra=TechnologyProgression.Era(world.Config,world.NetworkLevel),TechnologyEras=world.Config.TechnologyEras,StoredFoodValue=world.StoredFoodValue,DevelopmentChange=world.DevelopmentChange,DevelopmentValue=world.DevelopmentValue,ProcessingValueAdded=world.ProcessingValueAdded,WorldId=worldId,FirstAdmissionPoints=world.FirstAdmissionPoints,Economy=Economy.Stats(world),
                 Sources=world.Objects.All<SourceView>().Where(x=>x.IsDiscovered).Select(x=>x with {Amount=x.LastObservedAmount}).ToImmutableArray(),Buildings=world.ObservedBuildings.Values.OrderBy(x=>x.Id).ToImmutableArray(),
-                Recipes=world.Config.Production.Recipes,BuildingTypes=world.Config.Production.Buildings,Stock=world.Stock.Amounts, FoodTypes=world.Config.Foods, FoodEaten=world.FoodEaten, HealthRestored=world.HealthRestored,
+                Recipes=world.Config.Production.Enabled?world.Config.Production.Recipes:[],BuildingTypes=world.Config.Production.Enabled?world.Config.Production.Buildings:[],Stock=world.Stock.Amounts, FoodTypes=world.Config.Foods, FoodEaten=world.FoodEaten, HealthRestored=world.HealthRestored,
                 Groups=world.Groups, Claims=world.Claims.Where(c=>c.ExpiresTick>world.Tick && resources.Any(f=>f.Id==c.FoodId)).ToImmutableArray(),
                 Enemies = world.Objects.All<EnemyView>().Where(x=>x.IsDiscovered).Select(x=>x with { Position=x.LastKnownPosition, Health=x.LastKnownHealth }).ToImmutableArray(),
                 DeadAnts = world.Objects.All<AntView>().Where(x=>x.Health<=0).ToImmutableArray(),
@@ -214,7 +218,7 @@ public sealed partial class GameSession : IAsyncDisposable {
                 NextNetworkRangeCells = world.NetworkLevel < world.Config.NetworkRanges.Length ? world.Config.NetworkRanges[world.NetworkLevel] : 0,
                 NextNetworkUpgradeCost = world.NetworkLevel < world.Config.NetworkRanges.Length ? world.Config.NetworkUpgradeCosts[world.NetworkLevel] : 0,
                 NetworkUpgradeSpent = world.NetworkUpgradeSpent,
-                Technologies = world.Config.Technologies.Select(x => new TechnologySnapshot(x.Id, x.Name, x.RequiredNetworkLevel, world.IsTechnologyUnlocked(x.Id))).ToImmutableArray(),
+                Technologies = TechnologyProgression.Unlocks(world),
                 CarryUpgradeSpent = world.CarryUpgradeSpent, Eggs = world.Eggs, EggsProduced = world.EggsProduced, EggsHatched = world.EggsHatched,
                 EggProductionCost = world.Config.RecruitmentCost,
                 MinimumReserve = world.Config.MinimumReserve, PopulationCap = world.Config.PopulationCap,

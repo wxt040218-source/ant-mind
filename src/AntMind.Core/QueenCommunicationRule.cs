@@ -61,7 +61,7 @@ public sealed class QueenCommunicationRule : IWorldRule {
             var ant = ants[i];
             if (ant.RequestQueenInfo)
                 ant = Allowed(ant)
-                    ? ant with {QueenSources=sources.Values.OrderBy(x=>x.Id).ToImmutableArray(),QueenBuildings=buildings.Values.OrderBy(x=>x.Id).ToImmutableArray(), QueenKnowledge = queen.Values.Where(x => x.Amount > 0).OrderBy(x => x.Id).ToImmutableArray(),
+                    ? ant with {KnownTechnologyLevel=world.NetworkLevel,QueenSources=sources.Values.OrderBy(x=>x.Id).ToImmutableArray(),QueenBuildings=buildings.Values.OrderBy(x=>x.Id).ToImmutableArray(), QueenKnowledge = queen.Values.Where(x => x.Amount > 0).OrderBy(x => x.Id).ToImmutableArray(),
                         ReceivedOrder=world.Groups.FirstOrDefault(g=>g.Id==ant.GroupId),
                         QueenClaims=world.Claims.Where(c=>c.ExpiresTick>world.Tick && queen.ContainsKey(c.FoodId)).ToImmutableArray(),
                         QueenInfoTick = world.Tick, QueenRequestStatus = ActionStatus.Succeeded }

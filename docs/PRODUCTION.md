@@ -1,3 +1,15 @@
+> v0.19：中转站升级为仓储与食物补给据点，保留稳定cache节点供以后运输系统使用；eat_from与本地补给查询见 [OUTPOSTS.md](OUTPOSTS.md)。wire18／content15／save5，兼容已知save1～4旧档。
+
+> v0.18：wire17／content14／save4；标准供给目标使用首次入巢点，新增整群当前／激活状态预检和重复程序告警汇总／恢复。完整说明见 [PRIORITY_FIXES_V018.md](PRIORITY_FIXES_V018.md)；下方旧版本记录须对照当前入口。
+
+> 当前v0.17：wire16/content13/save4；Agent监控、摘要／回执与候选预览见 [AGENT_EVENTS.md](AGENT_EVENTS.md)。默认厨师使用recipe_ready按实际局部物料与输出容量决定是否开始加工；旧档程序保留，须显式提交才采用新模板。加工提醒按观察变化归并，不代替累计经济账。
+
+> v0.16：wire15 / content13 / save4；木材、专职建筑蚁、地图放置和独立透明素材见 [BUILDINGS_WOOD.md](BUILDINGS_WOOD.md)。下面v0.15及更早版本号为历史，个体成长与经济规则继续适用。
+
+> v0.15 当前增量：wire14 / content12 / save3；每只蚂蚁独立三级经验，固定点属性加成与探索去重，规则47/48结算。新增 F12 游戏内控制台及 tools/AntMind.Console，共用受控命令解析；详见 [ANT_LEVELS_CONSOLE.md](ANT_LEVELS_CONSOLE.md)。旧版本说明仍作历史，不把本轮本地验证当成远端 CI。
+
+> v0.14 当前规则：wire=13 / content=11 / save=2。科技就是虫群网络等级；厨房／厨师／浓缩二级，蛋白餐三级，混合营养餐四级，盛宴五级。升级用 DevelopmentValue 精确支付并保存找零，Inventory 仍为实物份数；配方 ExtraInputs 原子预留，来源汇总。完整现行说明和验证见 [TECH_FOOD_VALUE.md](TECH_FOOD_VALUE.md)，下方 v0.13 及更早的单输入、无价值差异、无旧档迁移等说明是历史记录。
+
 # 生产扩展交接 v0.13
 
 更新：2026-11-09。现行玩法见 MVP_SPEC.md，原方案见 EXPANSION_IMPLEMENTATION_PLAN.md。此页说明已经实现的第一条产业链及其边界。

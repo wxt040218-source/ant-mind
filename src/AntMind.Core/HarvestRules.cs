@@ -46,13 +46,11 @@ public sealed class MovementRule : IWorldRule {
             var load = Math.Clamp(ant.Carry, 0, capacity);
             var speedLoss = (species.EmptyMoveUnitsPerTick - species.LoadedMoveUnitsPerTick) * load /
                 capacity;
-            var distancePerTick = species.EmptyMoveUnitsPerTick - speedLoss;
-            var dx = Math.Clamp(x - ant.Position.X, -distancePerTick, distancePerTick);
-            var remaining = distancePerTick - Math.Abs(dx);
-            var dy = Math.Clamp(y - ant.Position.Y, -remaining, remaining);
-            var next = new Point(ant.Position.X + dx, ant.Position.Y + dy);
-            var arrived = next == new Point(x, y);
-            ants[i] = ant with { Position = next, Intent = arrived ? AntAction.Wait : AntAction.Move,
+            var distancePerTick = checked((species.EmptyMoveUnitsPerTick-speedLoss)*world.Config.Veterancy.MovePercent[ant.Level-1]/100);
+            var destination=new Point(x,y);
+            var next=PointMath.Towards(ant.Position,destination,distancePerTick);
+            var arrived=next==destination;
+            ants[i] = ant with { Position=next, Target=destination, Intent = arrived ? AntAction.Wait : AntAction.Move,
                 ActionStatus = arrived ? ActionStatus.Succeeded : ActionStatus.Running,
                 ActionResult = arrived ? "arrived" : "moving" };
         }

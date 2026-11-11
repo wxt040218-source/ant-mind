@@ -2,9 +2,9 @@
 if (queen_connected) { request_queen_info(); }
 let station = param("station");
 if (station > 0) {
-    if (max(abs(x-objective_x),abs(y-objective_y)) > 1000) { move_to(objective_x,objective_y); }
+    if (max(abs(x-objective_x),abs(y-objective_y)) > 1000) { set_target(objective_x,objective_y); }
     else {
-        if (building_ready(station) == 0) { work(station); }
-        else { if (building_busy(station)) { work(station); } else { process(station,param("recipe")); } }
+        if (building_ready(station) == 0) { wait(); }
+        else { if (building_busy(station)) { work(station); } else { if (recipe_ready(station,param("recipe"))) { process(station,param("recipe")); } else { wait(); } } }
     }
 } else { wait(); }

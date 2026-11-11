@@ -1,3 +1,17 @@
+> v0.19：中转站升级为仓储与食物补给据点，保留稳定cache节点供以后运输系统使用；eat_from与本地补给查询见 [OUTPOSTS.md](OUTPOSTS.md)。wire18／content15／save5，兼容已知save1～4旧档。
+
+> v0.18：wire17／content14／save4；标准供给目标使用首次入巢点，新增整群当前／激活状态预检和重复程序告警汇总／恢复。完整说明见 [PRIORITY_FIXES_V018.md](PRIORITY_FIXES_V018.md)；下方旧版本记录须对照当前入口。
+
+> 当前v0.17：先读 [AGENT_EVENTS.md](AGENT_EVENTS.md)，425检查通过；wire16/content13/save4。Agent事件／游标等待、原子组配置、任务回执、摘要及候选预览已实现；日志非持久事件回放。危险实玩旧局已独立保存并恢复暂停，不自动推进。其他v0.16规则与边界继续适用；下方旧“下一步”须对照最新状态。
+
+> v0.16.1导航更新：`set_target(x,y)` 设置持续目标，任意方向固定点移动；`move_to` 兼容。新增 `has_target`、`target_x/y`、`target_distance`、`target_reached`；详见 [FREE_MOVEMENT.md](FREE_MOVEMENT.md)。消息／存档形状保持。
+
+> 当前v0.16：wire15 / content13 / save4；木材、专职建筑蚁、地图放置和独立透明素材见 [BUILDINGS_WOOD.md](BUILDINGS_WOOD.md)。下面v0.15及更早版本号为历史，个体成长与经济规则继续适用。
+
+> v0.15 当前增量：wire14 / content12 / save3；每只蚂蚁独立三级经验，固定点属性加成与探索去重，规则47/48结算。新增 F12 游戏内控制台及 tools/AntMind.Console，共用受控命令解析；详见 [ANT_LEVELS_CONSOLE.md](ANT_LEVELS_CONSOLE.md)。旧版本说明仍作历史，不把本轮本地验证当成远端 CI。
+
+> v0.14 当前规则：wire=13 / content=11 / save=2。科技就是虫群网络等级；厨房／厨师／浓缩二级，蛋白餐三级，混合营养餐四级，盛宴五级。升级用 DevelopmentValue 精确支付并保存找零，Inventory 仍为实物份数；配方 ExtraInputs 原子预留，来源汇总。完整现行说明和验证见 [TECH_FOOD_VALUE.md](TECH_FOOD_VALUE.md)，下方 v0.13 及更早的单输入、无价值差异、无旧档迁移等说明是历史记录。
+
 > 2026-11-08 v0.13 当前实现：wire=12、content=10、save=1。新增厨师蚁、类型来源 CreditLot、ItemLedger 只读守恒汇总、果丛／纤维源、实体施工／中转／转交、加工台两配方、完整存读档与隔离评估。组合根统一在 Runtime/GameRules.cs，GameSession 与 evaluate_save 均使用；源头生长 2、活动采样 18、生产交互 30、工作 31、进食调整为 32、统计 49。动作显式调用，所有规划交给 Agent。新版事实以 MVP_SPEC.md、PRODUCTION.md 为准，下方早期“未实现存档”等历史描述已过时。
 
 > 下一阶段规划：先读 [EXPANSION_IMPLEMENTATION_PLAN.md](EXPANSION_IMPLEMENTATION_PLAN.md)。这是 2026-11-08 开发前草案，不是已实现接口；从 M0 存档／统计开始，不跳过批次来源、防重复计分、发现权限或配方依赖检查。当前发布玩法仍见 MVP_SPEC.md，后续实现时逐阶段同步协议／存档／内容版本。

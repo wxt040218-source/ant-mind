@@ -6,8 +6,14 @@ namespace AntMind.Runtime;
 
 public sealed partial class GameSession {
     private static bool EquivalentCommands(GameCommand a,GameCommand b) =>
-        a with { AntIds=default } == b with { AntIds=default } &&
+        a with { AntIds=default,GroupConfiguration=null } == b with { AntIds=default,GroupConfiguration=null } &&
+        EquivalentSetup(a.GroupConfiguration,b.GroupConfiguration) &&
         (a.AntIds.IsDefault?ImmutableArray<int>.Empty:a.AntIds).SequenceEqual(b.AntIds.IsDefault?ImmutableArray<int>.Empty:b.AntIds);
+    private static bool EquivalentSetup(GroupConfiguration? a,GroupConfiguration? b) => a is null?b is null:b is not null &&
+        a with {Members=[],Parameters=ImmutableDictionary<string,int>.Empty,Points=ImmutableDictionary<string,Point>.Empty} == b with {Members=[],Parameters=ImmutableDictionary<string,int>.Empty,Points=ImmutableDictionary<string,Point>.Empty} &&
+        a.Members.IsDefault==b.Members.IsDefault && (a.Members.IsDefault || a.Members.SequenceEqual(b.Members)) &&
+        EquivalentMap(a.Parameters,b.Parameters) && EquivalentMap(a.Points,b.Points);
+    private static bool EquivalentMap<T>(ImmutableDictionary<string,T>? a,ImmutableDictionary<string,T>? b)=>a is null?b is null:b is not null && a.OrderBy(x=>x.Key,StringComparer.Ordinal).SequenceEqual(b.OrderBy(x=>x.Key,StringComparer.Ordinal));
     private bool QueueProgram(GameCommand command,out string error) {
         error="invalid_species";
         if(!world.Config.AntTypes.Any(x=>x.Id==command.Species)) return false;
@@ -23,6 +29,7 @@ public sealed partial class GameSession {
     private CommandResult ApplyGroupCommand(GameCommand command) {
         CommandResult Fail(string code)=>new(command.RequestId,false,code,revision);
         if(string.IsNullOrWhiteSpace(command.Reason) || command.Reason.Length>256) return Fail("reason_required");
+        if(command.Kind==CommandKind.ConfigureGroup)return ConfigureGroup(command);
         var group=command.Kind==CommandKind.CreateGroup?null:world.Groups.FirstOrDefault(g=>g.Id==command.GroupId);
         if(command.Kind!=CommandKind.CreateGroup && command.GroupId!=0 && group is null) return Fail("group_not_found");
         bool PointValid(Point? p)=>p is null || p.Value.X>=0 && p.Value.Y>=0 && p.Value.X<(long)world.Config.Width*Point.UnitsPerCell && p.Value.Y<(long)world.Config.Height*Point.UnitsPerCell;
@@ -76,4 +83,27 @@ public sealed partial class GameSession {
         revision++;
         return new(command.RequestId,true,"applied",revision);
     }
+    private CommandResult ConfigureGroup(GameCommand c) {
+        CommandResult Fail(string code)=>new(c.RequestId,false,code,revision);
+        if(c.GroupConfiguration is not {} setup)return Fail("group_configuration_required");
+        var old=world.Groups.FirstOrDefault(g=>g.Id==c.GroupId);
+        if(c.GroupId<0 || c.GroupId>0 && old is null)return Fail("group_not_found");
+        if(old is null && world.Groups.Length>=32)return Fail("group_capacity");
+        bool Key(string key)=>key.Length is >0 and <=40 && key.All(ch=>char.IsAsciiLetterOrDigit(ch) || ch is '_' or '-' or '.');
+        bool Valid(Point? p)=>p is null || p.Value.X>=0 && p.Value.Y>=0 && p.Value.X<(long)world.Config.Width*1000 && p.Value.Y<(long)world.Config.Height*1000;
+        if(string.IsNullOrWhiteSpace(setup.Name) || setup.Name.Length>40 || setup.Task is null || setup.Task.Length>256 || string.IsNullOrWhiteSpace(setup.Activity) || setup.Activity.Length>80 || setup.FoodFilter is null || setup.FoodFilter.Length>0 && !world.Config.Foods.Any(f=>f.Id==setup.FoodFilter) || setup.RadiusCells is <1 or >32)return Fail("invalid_group_configuration");
+        if(!Valid(setup.Rally) || !Valid(setup.Objective) || !Valid(setup.Retreat) || setup.Parameters is null || setup.Parameters.Count>64 || setup.Parameters.Keys.Any(k=>!Key(k)) || setup.Points is null || setup.Points.Count>16 || setup.Points.Any(k=>!Key(k.Key) || !Valid(k.Value)))return Fail("invalid_group_fields");
+        if(setup.Members.IsDefault || setup.Members.Length>100 || setup.Members.Distinct().Count()!=setup.Members.Length)return Fail("invalid_ant_ids");
+        if(setup.Members.Any(id=>!world.Ants.Any(a=>a.Id==id)))return Fail("ant_not_found");
+        var nest=Point.FromCells(world.Config.Width/2,world.Config.Height/2);var id=old?.Id??world.NextGroupId;
+        var next=new GroupOrder(id,setup.Name,setup.Task,setup.Rally??nest,setup.Objective??nest,setup.Retreat??nest,(old?.Version??0)+1) {Activity=setup.Activity,FoodFilter=setup.FoodFilter,RadiusCells=setup.RadiusCells,Parameters=setup.Parameters,Points=setup.Points};
+        var members=setup.Members.ToHashSet();var changed=world.Ants.Where(a=>members.Contains(a.Id)?a.GroupId!=id:a.GroupId==id).Select(a=>a.Id).ToHashSet();
+        world=world with {
+            Groups=world.Groups.Where(g=>g.Id!=id).Append(next).OrderBy(g=>g.Id).ToImmutableArray(),NextGroupId=old is null?checked(world.NextGroupId+1):world.NextGroupId,
+            Ants=world.Ants.Select(a=>changed.Contains(a.Id)?ResetBehavior(a) with {GroupId=members.Contains(a.Id)?id:0,ReceivedOrder=null,QueenClaims=[]}:a).ToImmutableArray(),
+            Claims=world.Claims.Where(claim=>!changed.Contains(claim.AntId)).ToImmutableArray()
+        };
+        revision++;return new(c.RequestId,true,"group_configured",revision,id.ToString(System.Globalization.CultureInfo.InvariantCulture));
+    }
+
 }

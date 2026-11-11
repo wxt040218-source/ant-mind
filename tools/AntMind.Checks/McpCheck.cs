@@ -31,9 +31,15 @@ internal static class McpCheck {
             await Rpc(1, "initialize", new { protocolVersion = "2025-06-18", capabilities = new { }, clientInfo = new { name = "antmind-checks", version = "1" } });
             await mcp.StandardInput.WriteLineAsync(JsonSerializer.Serialize(new { jsonrpc = "2.0", method = "notifications/initialized" }));
             var tools = await Rpc(2, "tools/list", new { });
-            if (tools.GetProperty("tools").GetArrayLength() != 9) throw new Exception("Unexpected tool schema.");
+            if (tools.GetProperty("tools").GetArrayLength() != 15) throw new Exception("Unexpected tool schema.");
             var handshakeView = await new PipeClient(pipeName).SendAsync(new(Protocol.Version, "observe"));
             if (handshakeView.Snapshot?.AgentConnected != true) throw new Exception("Completed MCP initialize handshake did not light the indicator.");
+            var catalog=await Rpc(98,"tools/call",new {name="get_catalog",arguments=new {}});
+            var catalogJson=JsonDocument.Parse(catalog.GetProperty("content")[0].GetProperty("text").GetString()!).RootElement;
+            if(catalogJson.GetProperty("TechnologyLevel").GetInt32()!=1 || !catalogJson.GetProperty("Unlocks").EnumerateArray().Any(x=>x.GetProperty("Id").GetString()=="building.workshop" && x.GetProperty("RequiredNetworkLevel").GetInt32()==2 && !x.GetProperty("Unlocked").GetBoolean()))throw new Exception("MCP technology catalog missing kitchen gate.");
+            var lockedKitchen=await Rpc(99,"tools/call",new {name="command",arguments=new {requestId=Guid.NewGuid().ToString(),expectedRevision=handshakeView.Snapshot!.Revision,kind="PlanBuild",value=0,reason="verify kitchen gate",key="workshop",pointX=64000,pointY=64000}});
+            if(!lockedKitchen.ToString().Contains("technology_locked"))throw new Exception("MCP bypassed kitchen technology gate.");
+            Console.WriteLine("PASS real MCP exposes food values and technology unlocks and rejects locked kitchen construction");
             var antRecord = await Rpc(22, "tools/call", new { name = "inspect_object", arguments = new { kind="ant", id=1 } });
             if (antRecord.ToString().Contains("object_not_found")) throw new Exception("MCP cannot inspect an independent ant record.");
             Console.WriteLine("PASS real MCP initialize handshake activates presence and independent object inspection");
@@ -103,7 +109,7 @@ internal static class McpCheck {
                 name="Expedition",task="collect meat",objectiveX=40000,objectiveY=32000 } });
             if(createGroup.TryGetProperty("isError",out var groupError) && groupError.GetBoolean()) throw new Exception(createGroup.ToString());
             var groupSnapshot=(await new PipeClient(pipeName).SendAsync(new(Protocol.Version,"observe"))).Snapshot!;
-            if(groupSnapshot.Groups.Length!=1 || groupSnapshot.Groups[0].Objective.X!=40000 || groupSnapshot.FoodTypes.Length!=5)
+            if(groupSnapshot.Groups.Length!=1 || groupSnapshot.Groups[0].Objective.X!=40000 || groupSnapshot.FoodTypes.Length!=8)
                 throw new Exception("MCP group points or typed food did not round-trip.");
             await Rpc(41,"tools/call",new {name="command",arguments=new {requestId=Guid.NewGuid().ToString(),expectedRevision=groupSnapshot.Revision,
                 kind="AssignAnt",value=0,reason="MCP assignment",groupId=1,antId=1} });

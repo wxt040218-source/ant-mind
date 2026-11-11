@@ -1,3 +1,15 @@
+> v0.19新增eat_from(holderId,itemCode)、building_can_feed(id)和nearest_supply_id/x/y/distance/food，均遵守局部感知及实际交互范围；详见[OUTPOSTS.md](OUTPOSTS.md)。
+
+> v0.17新增：require_param("key")、require_group_x/y("key")严格读取已接收任务，缺失停止决策并清目标，配置为0合法；recipe_ready(station,recipeCode)检查局部工位、缓存科技、全部原料与输出容量。旧宽松查询保持兼容。preview_program只读执行候选一次，不结算实际动作，见 [AGENT_EVENTS.md](AGENT_EVENTS.md)。wire16/content13/save4。
+
+> v0.16.1导航更新：`set_target(x,y)` 设置持续目标，任意方向固定点移动；`move_to` 兼容。新增 `has_target`、`target_x/y`、`target_distance`、`target_reached`；详见 [FREE_MOVEMENT.md](FREE_MOVEMENT.md)。消息／存档形状保持。
+
+> v0.16当前接口：wire15 / content13 / save4。建筑定义 MaterialType/MaterialCost/BuilderSpecies，工地 ConstructionItem；新增 food_wood、species_builder、building_phase(id)、building_material(id)、building_cost(id)。PlanBuild新增公开建筑／蚁后2格间距校验，仅建筑蚁可施工；详细规则和示例见 [BUILDINGS_WOOD.md](BUILDINGS_WOOD.md)。
+
+> v0.15 当前增量：wire14 / content12 / save3；每只蚂蚁独立三级经验，固定点属性加成与探索去重，规则47/48结算。新增 F12 游戏内控制台及 tools/AntMind.Console，共用受控命令解析；详见 [ANT_LEVELS_CONSOLE.md](ANT_LEVELS_CONSOLE.md)。旧版本说明仍作历史，不把本轮本地验证当成远端 CI。
+
+> v0.14 当前规则：wire=13 / content=11 / save=2。科技就是虫群网络等级；厨房／厨师／浓缩二级，蛋白餐三级，混合营养餐四级，盛宴五级。升级用 DevelopmentValue 精确支付并保存找零，Inventory 仍为实物份数；配方 ExtraInputs 原子预留，来源汇总。完整现行说明和验证见 [TECH_FOOD_VALUE.md](TECH_FOOD_VALUE.md)，下方 v0.13 及更早的单输入、无价值差异、无旧档迁移等说明是历史记录。
+
 > 当前 v0.13：wire=12、content=10、save=1。最新生产／存档接口见本文末尾 v0.13 节和 PRODUCTION.md。小组仅存数据，所有组共用每蚁种程序；Visibility、Recruit、SetQueenRange、组程序已停用。优先先读 AGENT_START_HERE.md 和 MVP_SPEC.md；下方旧版本演进描述不代表当前可用接口。
 
 # 蚂蚁程序 DSL v0.11
@@ -12,7 +24,8 @@
 
 | 调用 | 执行规则 |
 | --- | --- |
-| move_to(x,y) | 固定点坐标，持续移动至目标，受到身体速度限制 |
+| set_target(x,y) | 设置绝对目标点，引擎按方向向量持续移动，受到身体／负载／等级速度限制 |
+| move_to(x,y) | set_target的兼容别名，供旧程序使用 |
 | pickup() | 只在当前位置附近拾取，一次最多填满当前有效载量；不自动走向资源 |
 | drop() | 在当前位置放下全部携带食物；不交付，不计分 |
 | deliver() | 只在巢穴附近交付全部携带食物；不自动回巢 |
@@ -134,3 +147,14 @@ pickup_from(food_id) 显式拾取指定近处对象，防止重叠水果与肉�
 `source_x/y/amount/type(id)` 查询本地源头，未知返回 0；`queen_source_x/y/amount/type(id)` 是显式下载的旧源头信息。`building_x/y/ready/busy/work(id), recipe_work(id), holder_stock(id,item), holder_output(id,item)` 只读本地设施。缺少对象返回 0；因此先检验 id 是否在本地列表，再判断 ready。qty 范围 1～100，实际行动结果为 items_moved:实际量或失败原因。
 
 默认厨师代码 content/programs/chef.ant：小组参数 station=设施ID、recipe=配方代码，objective=工位坐标；同一代码服务所有厨房组。其他物流可参考 scripts/production-demo.py 中 Agent 实际提交的共享搬运程序。批量 observe 为控制消息体省略个体报告与知识数组；这不会清除世界内程序缓存，存档保存完整缓存。
+
+
+## v0.14 科技与价值查询
+
+`technology_level` 为个体 KnownTechnologyLevel，只在 request_queen_info 成功后更新。`recipe_unlocked(code)` 按此缓存与公开配方门槛判断（遍历项计费），并不保证远处工位已有原料。`food_value(itemCode)` 返回该可食用物的单位发展价值，未知／纤维返回零。新常量 `food_balanced`、`food_royal`，也可用 item_code("balanced_meal") 等稳定 ID。
+
+process(buildingId,recipeCode) 语法不变，多输入由配方公开 ExtraInputs 定义，不能在蚂蚁代码里私自合成。工程师可继续 work 建设，默认厨师对未解锁配方等待。保持所有组共享同职业代码，只用各组 station／recipe／地点安排不同工位。
+
+## v0.15 个体查询
+
+ant_level（1～3）、experience（满级封顶）、experience_to_next（满级0）、move_percent、work_percent、attack_damage 是自身可用数据。职业代码仍共享，可以按个体成长选择行为，不新增私有程序。变量查询照常消耗预算。升级不增加共同大脑预算或改变载量。

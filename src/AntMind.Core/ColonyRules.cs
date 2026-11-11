@@ -10,17 +10,22 @@ public sealed class EatingRule : IWorldRule {
             var ant=original;
             if(ant.HealUntilTick==0 && ant.Intent!=AntAction.Eat) continue;
             var definition=world.Config.Foods.FirstOrDefault(x=>x.Id==ant.EatFood);
-            var cargo=ant.Carry>0 && ant.CarryFood==ant.EatFood;
+            var cargo=ant.EatHolderId==-1 && ant.Carry>0 && ant.CarryFood==ant.EatFood;
             var atNest=CombatMath.Distance(ant.Position,((QueenObject)world.Objects.Find("queen",1)!).Position)<=Point.UnitsPerCell;
+            var station=ant.EatHolderId>0?world.Objects.Find("building",ant.EatHolderId) as BuildingView:null;
+            var stationError=ant.EatHolderId>0 ? station is null || CombatMath.Distance(ant.Position,station.Position)>Point.UnitsPerCell?"feeding_station_not_in_reach":
+                station.Phase!="ready"?"station_not_ready":world.Config.Production.Buildings.FirstOrDefault(b=>b.Id==station.Type)?.CanFeedAnts!=true?"not_a_feeding_station":
+                station.Store.Get(ant.EatFood)<1?"insufficient_food":null : null;
             var error=ant.LastDamageTick==world.Tick ? "eating_interrupted" : ant.Health>=ant.MaxHealth ? "already_healthy" :
-                definition is null || !definition.Edible ? "invalid_food_type" : !cargo && !atNest ? "no_carried_food" :
-                !cargo && (world.Stock.Get(ant.EatFood)<1 || world.Inventory-1<world.Config.MinimumReserve) ? "insufficient_food" : null;
+                definition is null || !definition.Edible ? "invalid_food_type" : ant.EatHolderId < -1?"invalid_food_holder":ant.EatHolderId>0?stationError:
+                !cargo && !atNest ? "no_carried_food" : !cargo && (world.Stock.Get(ant.EatFood)<1 || world.DevelopmentValue-definition.Value<world.Config.MinimumReserve) ? "insufficient_food" : null;
             if(error is not null) ant=ant with { HealUntilTick=0, Intent=AntAction.Wait, ActionStatus=ActionStatus.Failed,ActionResult=error };
             else if(ant.HealUntilTick==0) ant=ant with { HealUntilTick=checked(world.Tick+world.Config.EatingTicks),
                 Intent=AntAction.Wait,Target=null,ActionStatus=ActionStatus.Running,ActionResult="eating" };
             else if(world.Tick>=ant.HealUntilTick) {
                 var restored=Math.Min(definition!.HealAmount,ant.MaxHealth-ant.Health);
                 if(cargo) ant=ant with { Carry=ant.Carry-1,CargoCredits=ItemCredit.Split(Economy.Credits(ant),1).Left,CargoTracked=true };
+                else if(station is not null)world=world with {Objects=world.Objects.Put(station with {Store=station.Store.Take(ant.EatFood,1).Store})};
                 else world=world with { Stock=world.Stock.Add(ant.EatFood,-1) };
                 ant=ant with { Health=ant.Health+restored,HealUntilTick=0,Intent=AntAction.Wait,NextDecisionTick=world.Tick+1,
                     ActionStatus=ActionStatus.Succeeded,ActionResult="ate_"+ant.EatFood };

@@ -14,7 +14,7 @@ public sealed class SpeciesProgramCatalog {
 
     public SpeciesProgramCatalog(IEnumerable<string> species) {
         foreach (var id in species.OrderBy(x => x, StringComparer.Ordinal)) {
-            var source = id switch { AntSpeciesIds.Chef=>DefaultProgramSources.Chef, AntSpeciesIds.Soldier => DefaultProgramSources.Soldier, AntSpeciesIds.Hauler => DefaultProgramSources.Hauler, _ => DefaultProgramSources.Scout };
+            var source = id switch { AntSpeciesIds.Builder=>DefaultProgramSources.Builder, AntSpeciesIds.Chef=>DefaultProgramSources.Chef, AntSpeciesIds.Soldier => DefaultProgramSources.Soldier, AntSpeciesIds.Hauler => DefaultProgramSources.Hauler, _ => DefaultProgramSources.Scout };
             var program = AntDslCompiler.Compile(source);
             versions.Add(id, [new(new(0, "built-in default"), source, program)]);
             active.Add(id, 0);

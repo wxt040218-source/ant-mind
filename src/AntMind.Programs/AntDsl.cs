@@ -48,6 +48,8 @@ internal sealed class DslExecution {
     private readonly Dictionary<string, int> variables;
     private readonly ImmutableArray<int>.Builder memory;
     private readonly Dictionary<(bool Queen,bool Job),ResourceView?> resourceCache=[];
+    private bool supplyScanned;
+    private (BuildingView? Site,string Food) supply=(null,"");
     public DslExecution(Perception perception, InstructionBudget budget,
         ImmutableArray<int> memory, IReadOnlyCollection<string> locals) {
         this.perception = perception;
@@ -59,6 +61,7 @@ internal sealed class DslExecution {
     }
     public ProductionIntent Production {get;private set;}=new();
     public string EatFood { get; private set; } = FoodTypes.Fruit;
+    public int EatHolderId {get;private set;}=-1;
     public int PickupFoodId { get; private set; }
     public int FollowAntId { get; private set; }
     public int FollowDistance { get; private set; }
@@ -81,7 +84,13 @@ internal sealed class DslExecution {
     public int Variable(string name) {
         Spend();
         return name switch {
+            "ant_level"=>perception.Level,"experience"=>perception.Experience,"experience_to_next"=>perception.ExperienceToNext,
+            "move_percent"=>perception.MovePercent,"work_percent"=>perception.WorkPercent,"attack_damage"=>perception.AttackDamage,
+            "technology_level"=>perception.TechnologyLevel,
+            "food_balanced"=>FoodCode(FoodTypes.Balanced),"food_royal"=>FoodCode(FoodTypes.Royal),
+            "food_wood"=>FoodCode(FoodTypes.Wood),
             "food_fiber"=>FoodCode(FoodTypes.Fiber),"food_concentrate"=>FoodCode(FoodTypes.Concentrate),"food_meal"=>FoodCode(FoodTypes.Meal),
+            "species_builder"=>perception.Species==AntSpeciesIds.Builder?1:0,
             "species_chef"=>perception.Species==AntSpeciesIds.Chef?1:0,
             "source_count"=>perception.Sources.Length,"building_count"=>perception.Buildings.Length,
             "queen_source_count"=>perception.QueenSources.Length,"queen_building_count"=>perception.QueenBuildings.Length,
@@ -91,6 +100,11 @@ internal sealed class DslExecution {
             "tick" => checked((int)(perception.Tick % int.MaxValue)),
             "x" => perception.Position.X,
             "y" => perception.Position.Y,
+            "has_target"=>Target.HasValue?1:0,
+            "target_x"=>Target?.X??0,
+            "target_y"=>Target?.Y??0,
+            "target_distance"=>Target is {} destination?(int)Math.Min(int.MaxValue,PointMath.Distance(perception.Position,destination)):int.MaxValue,
+            "target_reached"=>Target==perception.Position?1:0,
             "nest_x" => perception.Nest.X,
             "nest_y" => perception.Nest.Y,
             "width" => perception.Width,
@@ -104,6 +118,11 @@ internal sealed class DslExecution {
             "carry_food_type" => FoodCode(perception.CarryFood),
             "nest_fruit" => (int)Math.Min(int.MaxValue,perception.NestStock.GetValueOrDefault(FoodTypes.Fruit)),
             "nest_meat" => (int)Math.Min(int.MaxValue,perception.NestStock.GetValueOrDefault(FoodTypes.Meat)),
+            "nearest_supply_id"=>NearestSupply().Site?.Id??0,
+            "nearest_supply_x"=>NearestSupply().Site?.Position.X??0,
+            "nearest_supply_y"=>NearestSupply().Site?.Position.Y??0,
+            "nearest_supply_food"=>FoodCode(NearestSupply().Food),
+            "nearest_supply_distance"=>NearestSupply().Site is {} supplySite?Math.Max(Math.Abs(supplySite.Position.X-perception.Position.X),Math.Abs(supplySite.Position.Y-perception.Position.Y)):int.MaxValue,
             "nearest_id" => NearestResource()?.Id??0,
             "nearest_food_type" => FoodCode(NearestResource()?.FoodType??""),
             "group_id" => perception.GroupId,
@@ -163,6 +182,9 @@ internal sealed class DslExecution {
         Spend();
         var order=perception.Order;
         return name switch {
+            "require_param"=>order is not null && order.Parameters.TryGetValue(key,out var parameter)?parameter:Missing("parameter",key),
+            "require_group_x"=>order is not null && order.Points.TryGetValue(key,out var pointX)?pointX.X:Missing("point",key),
+            "require_group_y"=>order is not null && order.Points.TryGetValue(key,out var pointY)?pointY.Y:Missing("point",key),
             "item_code"=>FoodCode(key),
             "param"=>order?.Parameters.GetValueOrDefault(key)??0,
             "has_param"=>order?.Parameters.ContainsKey(key)==true?1:0,
@@ -178,6 +200,22 @@ internal sealed class DslExecution {
         variables[name] = value;
     }
 
+    private int Missing(string kind,string key) {
+        Action=AntAction.Wait;Target=null;
+        throw new DslRuntimeException("missing_group_"+kind+":"+key);
+    }
+    private int RecipeReady(int station,int code) {
+        var building=BuildingAt(station);
+        if(building is null || building.Phase!="ready" || building.Recipe.Length>0)return 0;
+        foreach(var recipe in perception.Recipes) {
+            Spend();if(recipe.Code!=code)continue;
+            if(perception.TechnologyLevel<recipe.RequiredNetworkLevel || building.Type!=recipe.BuildingType)return 0;
+            foreach(var input in recipe.Ingredients()) {Spend();if(building.Store.Get(input.Key)<input.Value)return 0;}
+            foreach(var type in perception.BuildingTypes) {Spend();if(type.Id==building.Type)return building.Output.Total+recipe.OutputCount<=type.Capacity?1:0;}
+            return 0;
+        }
+        return 0;
+    }
     public int ReadMemory(int index) {
         Spend();
         if (index is < 0 or >= AntDslCompiler.MemorySlots) throw new DslRuntimeException("memory_index_out_of_range");
@@ -195,6 +233,9 @@ internal sealed class DslExecution {
     public int Function(string name, int[] values) {
         Spend();
         return name switch {
+            "recipe_ready"=>RecipeReady(values[0],values[1]),
+            "recipe_unlocked"=>RecipeUnlocked(values[0]),
+            "food_value"=>perception.FoodDefinitions.FirstOrDefault(x=>x.Id==FoodName(values[0])) is {Edible:true} item?item.Value:0,
             "source_id_at"=>SourceIndex(values[0],false),"queen_source_id_at"=>SourceIndex(values[0],true),
             "building_id_at"=>BuildingIndex(values[0],false),"queen_building_id_at"=>BuildingIndex(values[0],true),
             "source_x"=>SourceAt(values[0])?.Position.X??0,"source_y"=>SourceAt(values[0])?.Position.Y??0,
@@ -203,6 +244,10 @@ internal sealed class DslExecution {
             "queen_source_amount"=>SourceAt(values[0],true)?.Amount??0,"queen_source_type"=>FoodCode(SourceAt(values[0],true)?.ItemType??""),
             "building_x"=>BuildingAt(values[0])?.Position.X??0,"building_y"=>BuildingAt(values[0])?.Position.Y??0,
             "building_ready"=>BuildingAt(values[0])?.Phase=="ready"?1:0,"building_busy"=>BuildingAt(values[0]) is {Recipe.Length:>0}?1:0,
+            "building_can_feed"=>BuildingAt(values[0]) is {Phase:"ready"} feeding && CanFeed(feeding)?1:0,
+            "building_phase"=>BuildingAt(values[0])?.Phase switch {"blueprint"=>1,"ready"=>2,"cancelled"=>3,_=>0},
+            "building_material"=>FoodCode(BuildingAt(values[0]) is {} site?(site.ConstructionItem.Length>0?site.ConstructionItem:perception.BuildingTypes.FirstOrDefault(d=>d.Id==site.Type)?.MaterialType??""):""),
+            "building_cost"=>BuildingAt(values[0]) is {} costSite?perception.BuildingTypes.FirstOrDefault(d=>d.Id==costSite.Type)?.MaterialCost??0:0,
             "building_work"=>BuildingAt(values[0])?.ConstructionWork??0,"recipe_work"=>BuildingAt(values[0])?.RecipeWork??0,
             "holder_stock"=>(int)Math.Min(int.MaxValue,BuildingAt(values[0])?.Store.Get(FoodName(values[1]))??0),
             "holder_output"=>(int)Math.Min(int.MaxValue,BuildingAt(values[0])?.Output.Get(FoodName(values[1]))??0),
@@ -222,6 +267,7 @@ internal sealed class DslExecution {
         };
     }
 
+    private int RecipeUnlocked(int code) {foreach(var r in perception.Recipes){Spend();if(r.Code==code)return perception.TechnologyLevel>=r.RequiredNetworkLevel?1:0;}return 0;}
     private int SourceIndex(int index,bool queen) {Spend();var list=queen?perception.QueenSources:perception.Sources;return index>=0 && index<list.Length?list[index].Id:0;}
     private int BuildingIndex(int index,bool queen) {Spend();var list=queen?perception.QueenBuildings:perception.Buildings;return index>=0 && index<list.Length?list[index].Id:0;}
     public void ActionStatement(string name, int[] values) {
@@ -232,16 +278,18 @@ internal sealed class DslExecution {
             case "process":Production=new(values[0],RecipeCode:values[1]);Action=AntAction.Process;Target=null;Branch=name;break;
             case "work":Production=new(values[0]);Action=AntAction.Work;Target=null;Branch=name;break;
             case "pickup_from": PickupFoodId=values[0];Action=AntAction.Pickup;Branch="pickup_from";break;
-            case "eat": EatFood=FoodName(values[0]);Target=null;Action=AntAction.Eat;Branch="eat";break;
+            case "eat": EatHolderId=-1;EatFood=FoodName(values[0]);Target=null;Action=AntAction.Eat;Branch="eat";break;
+            case "eat_from":EatHolderId=values[0];EatFood=FoodName(values[1]);Target=null;Action=AntAction.Eat;Branch="eat_from";break;
             case "follow": FollowAntId=values[0];FollowDistance=values[1];Action=AntAction.Follow;Branch="follow";break;
             case "claim_food": ClaimFoodId=values[0];ClaimQuantity=values[1];ClaimDuration=values[2];Branch="claim_food";break;
             case "release_claim": ReleaseClaim=true;Branch="release_claim";break;
+            case "set_target" when values.Length == 2:
             case "move_to" when values.Length == 2:
                 var maxX = (perception.Width - 1) * Point.UnitsPerCell;
                 var maxY = (perception.Height - 1) * Point.UnitsPerCell;
                 Target = new(Math.Clamp(values[0], 0, maxX), Math.Clamp(values[1], 0, maxY));
                 Action = AntAction.Move;
-                Branch = "move_to";
+                Branch = name;
                 break;
             case "attack" when values.Length == 1:
                 AttackTargetId = values[0]; Target = null; Action = AntAction.Attack; Branch = "attack"; break;
@@ -275,13 +323,30 @@ internal sealed class DslExecution {
     public Decision Decision(string branch, string? error = null) => new(branch == "dsl-complete" && Branch != "dsl-idle"
             ? Branch : branch,
         budget.Initial - budget.Remaining, Target, Action, memory.ToImmutable(), error, RequestQueenInfo, ReportDiscovery) { Production=Production,AttackTargetId = AttackTargetId, PickupFoodId=PickupFoodId, EatFood=EatFood,FollowAntId=FollowAntId,FollowDistance=FollowDistance,
-            ClaimFoodId=ClaimFoodId,ClaimQuantity=ClaimQuantity,ClaimDuration=ClaimDuration,ReleaseClaim=ReleaseClaim };
+            ClaimFoodId=ClaimFoodId,ClaimQuantity=ClaimQuantity,ClaimDuration=ClaimDuration,ReleaseClaim=ReleaseClaim,EatHolderId=EatHolderId };
 
     private int FoodCode(string id) {
         for(int i=0;i<perception.FoodDefinitions.Length;i++) if(perception.FoodDefinitions[i].Id==id) return i+1;
         return 0;
     }
     private string FoodName(int code) => code>0 && code<=perception.FoodDefinitions.Length?perception.FoodDefinitions[code-1].Id:"unknown";
+    private bool CanFeed(BuildingView site) {
+        foreach(var definition in perception.BuildingTypes){Spend();if(definition.Id==site.Type)return definition.CanFeedAnts;}
+        return false;
+    }
+    private (BuildingView? Site,string Food) NearestSupply() {
+        if(supplyScanned)return supply;supplyScanned=true;long best=long.MaxValue;
+        foreach(var site in perception.Buildings.OrderBy(b=>b.Id)) {
+            Spend();if(site.Phase!="ready" || !CanFeed(site))continue;
+            var distance=Math.Max(Math.Abs((long)site.Position.X-perception.Position.X),Math.Abs((long)site.Position.Y-perception.Position.Y));
+            if(distance>=best)continue;
+            foreach(var food in perception.FoodDefinitions) {
+                Spend();if(!food.Edible || food.HealAmount<=0 || site.Store.Get(food.Id)<=0)continue;
+                supply=(site,food.Id);best=distance;break;
+            }
+        }
+        return supply;
+    }
     private AllyView? AllyAt(int id) {
         foreach(var ally in perception.NearbyAllies) { Spend();if(ally.Id==id) return ally; }return null;
     }
@@ -432,7 +497,9 @@ internal readonly record struct DslToken(DslTokenKind Kind, string Text, int Off
 
 internal sealed class AntDslParser {
     private static readonly HashSet<string> Builtins = new(StringComparer.Ordinal) {
-        "food_fiber","food_concentrate","food_meal","species_chef","source_count","building_count","queen_source_count","queen_building_count",
+        "nearest_supply_id","nearest_supply_x","nearest_supply_y","nearest_supply_distance","nearest_supply_food",
+        "has_target","target_x","target_y","target_distance","target_reached",
+        "food_wood","species_builder","ant_level","experience","experience_to_next","move_percent","work_percent","attack_damage","technology_level","food_balanced","food_royal","food_fiber","food_concentrate","food_meal","species_chef","source_count","building_count","queen_source_count","queen_building_count",
         "group_task","task_collect","task_explore","task_guard","group_food_type","group_radius",
         "job_food_id","job_food_amount","job_food_x","job_food_y","job_food_distance","job_queen_amount","job_queen_x","job_queen_y","job_explore_x","job_explore_y",
         "max_health", "food_fruit", "food_meat", "carry_food_type", "nest_fruit", "nest_meat", "nearest_id", "nearest_food_type", "group_id", "group_order_version", "rally_x", "rally_y", "objective_x", "objective_y", "retreat_x", "retreat_y", "nearest_ally_id", "nearest_group_member_id",
@@ -440,9 +507,9 @@ internal sealed class AntDslParser {
         "carry", "capacity", "species_scout", "species_hauler", "nearest_amount", "nearest_x", "nearest_y",
         "at_nest", "nearest_distance", "action_status", "queen_info_tick", "queen_request_status", "queen_report_status", "explore_x", "explore_y", "queen_connected", "queen_count", "queen_amount", "queen_x", "queen_y"
     };
-    private static readonly HashSet<string> ExpressionFunctions = new(StringComparer.Ordinal) { "source_id_at", "queen_source_id_at", "building_id_at", "queen_building_id_at", "source_x", "source_y", "source_amount", "source_type", "queen_source_x", "queen_source_y", "queen_source_amount", "queen_source_type", "building_x", "building_y", "building_ready", "building_busy", "building_work", "recipe_work", "holder_stock", "holder_output", "abs", "min", "max", "queen_x_at", "queen_y_at", "queen_amount_at", "queen_food_type_at", "claimed_amount", "ally_x", "ally_y", "ally_health", "stock" };
+    private static readonly HashSet<string> ExpressionFunctions = new(StringComparer.Ordinal) { "recipe_ready","recipe_unlocked","food_value","source_id_at", "queen_source_id_at", "building_id_at", "queen_building_id_at", "source_x", "source_y", "source_amount", "source_type", "queen_source_x", "queen_source_y", "queen_source_amount", "queen_source_type", "building_x", "building_y", "building_ready", "building_busy", "building_can_feed", "building_phase", "building_material", "building_cost", "building_work", "recipe_work", "holder_stock", "holder_output", "abs", "min", "max", "queen_x_at", "queen_y_at", "queen_amount_at", "queen_food_type_at", "claimed_amount", "ally_x", "ally_y", "ally_health", "stock" };
     private static readonly HashSet<string> Actions = new(StringComparer.Ordinal) {
-        "harvest","deposit","withdraw","transfer","work","process", "pickup_from", "eat", "follow", "claim_food", "release_claim", "attack", "move_to", "pickup", "deliver", "wait", "drop", "request_queen_info", "report_discovery"
+        "harvest","deposit","withdraw","transfer","work","process", "pickup_from", "eat", "eat_from", "follow", "claim_food", "release_claim", "attack", "set_target", "move_to", "pickup", "deliver", "wait", "drop", "request_queen_info", "report_discovery"
     };
     private readonly List<DslToken> tokens;
     private readonly HashSet<string> locals = new(StringComparer.Ordinal);
@@ -491,7 +558,7 @@ internal sealed class AntDslParser {
         if (!Actions.Contains(identifier.Text)) ErrorAt(identifier, $"Unknown action '{identifier.Text}'.");
         var arguments = ParseArguments(); Expect(";");
         var expected = identifier.Text switch {
-            "harvest" or "process" or "move_to" or "follow" => 2,
+            "harvest" or "process" or "set_target" or "move_to" or "follow" or "eat_from" => 2,
             "deposit" or "withdraw" or "transfer" or "claim_food" => 3,
             "work" or "eat" or "pickup_from" => 1,
             "release_claim" => 0,
@@ -569,7 +636,7 @@ internal sealed class AntDslParser {
             }
             var identifier = Expect(DslTokenKind.Identifier, "Expected an expression.");
             if (Match("(")) {
-                if(identifier.Text is "item_code" or "param" or "has_param" or "group_x" or "group_y" or "has_point") {
+                if(identifier.Text is "require_param" or "require_group_x" or "require_group_y" or "item_code" or "param" or "has_param" or "group_x" or "group_y" or "has_point") {
                     var key=Expect(DslTokenKind.String,"Expected a quoted group parameter or point name.");
                     if(key.Text.Length is <1 or >40) ErrorAt(key,"Group key must have 1..40 characters.");
                     Expect(")");return Node(new DslGroupValue(identifier.Text,key.Text));
@@ -578,7 +645,7 @@ internal sealed class AntDslParser {
                 var args = new List<DslExpression>();
                 if (!Is(")")) { do { args.Add(ParseExpression()); } while (Match(",")); }
                 Expect(")");
-                var expected = identifier.Text switch { "source_id_at" or "queen_source_id_at" or "building_id_at" or "queen_building_id_at" or "source_x" or "source_y" or "source_amount" or "source_type" or "queen_source_x" or "queen_source_y" or "queen_source_amount" or "queen_source_type" or "building_x" or "building_y" or "building_ready" or "building_busy" or "building_work" or "recipe_work" or "abs" or "queen_x_at" or "queen_y_at" or "queen_amount_at" or "queen_food_type_at" or "claimed_amount" or "ally_x" or "ally_y" or "ally_health" or "stock" => 1, "holder_stock" or "holder_output" or "min" or "max" => 2, _ => -1 };
+                var expected = identifier.Text switch { "recipe_unlocked" or "food_value" or "source_id_at" or "queen_source_id_at" or "building_id_at" or "queen_building_id_at" or "source_x" or "source_y" or "source_amount" or "source_type" or "queen_source_x" or "queen_source_y" or "queen_source_amount" or "queen_source_type" or "building_x" or "building_y" or "building_ready" or "building_busy" or "building_can_feed" or "building_phase" or "building_material" or "building_cost" or "building_work" or "recipe_work" or "abs" or "queen_x_at" or "queen_y_at" or "queen_amount_at" or "queen_food_type_at" or "claimed_amount" or "ally_x" or "ally_y" or "ally_health" or "stock" => 1, "recipe_ready" or "holder_stock" or "holder_output" or "min" or "max" => 2, _ => -1 };
                 if (args.Count != expected) ErrorAt(identifier, $"Function '{identifier.Text}' expects {expected} argument(s).");
                 return Node(new DslCall(identifier.Text, args));
             }

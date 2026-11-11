@@ -2,8 +2,8 @@ if (group_id > 0) {
     if (carry > 0) { drop(); }
     else {
         if (queen_connected) { report_discovery(); request_queen_info(); }
-        if (group_order_version == 0) { move_to(nest_x,nest_y); }
-        else { move_to(job_explore_x,job_explore_y); }
+        if (group_order_version == 0) { set_target(nest_x,nest_y); }
+        else { set_target(job_explore_x,job_explore_y); }
     }
 } else {
 let mode = memory[0];
@@ -13,13 +13,13 @@ else if (mode >= 3) {
         memory[4] = ((ant_id * 29 + memory[5] * 23) % height) * 1000;
         memory[5] = memory[5] + 1;
         memory[0] = 3;
-        move_to(memory[3], memory[4]);
+        set_target(memory[3], memory[4]);
     } else {
         if (queen_connected) { report_discovery(); }
         if (memory[1] == 0) { memory[1] = tick + 480; }
-        if (tick >= memory[1]) { memory[0] = 1; move_to(nest_x,nest_y); }
+        if (tick >= memory[1]) { memory[0] = 1; set_target(nest_x,nest_y); }
         else if (action_status == 2) { memory[0] = 0; wait(); }
-        else { move_to(memory[3],memory[4]); }
+        else { set_target(memory[3],memory[4]); }
     }
 } else if (mode == 0) {
     memory[3] = ((ant_id * 17 + memory[5] * 19) % width) * 1000;
@@ -34,6 +34,6 @@ else if (mode >= 3) {
     if (at_nest) {
         report_discovery(); request_queen_info();
         memory[2] = tick; memory[0] = 2; wait();
-    } else { move_to(nest_x,nest_y); }
+    } else { set_target(nest_x,nest_y); }
 }
 }

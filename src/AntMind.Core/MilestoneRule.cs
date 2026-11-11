@@ -15,12 +15,12 @@ public sealed class MilestoneRule : IWorldRule {
     public int Order => 50;
     public static ImmutableArray<MilestoneDefinition> Defaults { get; } = [
         new("discover-5", "探路先锋", "发现 5 处天然食物", "discovered_food", 5),
-        new("deliver-50", "稳定供给", "累计送回 50 份食物", "delivered", 50),
+        new("deliver-50", "稳定供给", "新食物首次入巢达到 50 点", "first_admission_points", 50),
         new("population-20", "蚁群初成", "让蚁群达到 20 只", "population", 20, ["deliver-50"]),
         new("network-3", "网络时代", "蚁群网络达到 Lv.3", "network_level", 3, ["discover-5"]),
-        new("supply-sprint", "运输冲刺", "解锁后 10 分钟内累计总交付达到 200", "delivered", 200, ["deliver-50"], 12000)
+        new("supply-sprint", "运输冲刺", "解锁后 10 分钟内新食物累计首次入巢达到 200 点", "first_admission_points", 200, ["deliver-50"], 12000)
     ];
-    private static readonly HashSet<string> Metrics = ["discovered_food", "delivered", "population", "network_level", "brain_level"];
+    private static readonly HashSet<string> Metrics = ["discovered_food", "delivered", "first_admission_points", "population", "network_level", "brain_level"];
     public static void Validate(ImmutableArray<MilestoneDefinition> definitions) {
         if (definitions.IsDefault || definitions.Length > 64 || definitions.Any(x => x is null ||
             string.IsNullOrWhiteSpace(x.Id) || x.Id.Length > 80 || string.IsNullOrWhiteSpace(x.Title) || x.Title.Length > 80 ||
@@ -46,7 +46,7 @@ public sealed class MilestoneRule : IWorldRule {
     }
     public static long Current(WorldState world, string metric) => metric switch {
         "discovered_food" => world.Objects.All<ResourceView>().Count(x=>x.IsDiscovered && x.Origin == ResourceOrigin.Natural),
-        "delivered" => world.Delivered, "population" => world.Ants.Length,
+        "delivered" => world.Delivered, "first_admission_points" => world.FirstAdmissionPoints, "population" => world.Ants.Length,
         "network_level" => world.NetworkLevel, "brain_level" => world.BrainLevel,
         _ => throw new ArgumentException("Unknown milestone metric.")
     };

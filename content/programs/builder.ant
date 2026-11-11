@@ -1,0 +1,7 @@
+// Every builder shares this program. Agent assigns station plus objective in group data.
+if (queen_connected) { request_queen_info(); }
+let station = param("station");
+if (station > 0) {
+    if (max(abs(x-objective_x),abs(y-objective_y)) > 800) { set_target(objective_x,objective_y); }
+    else { if (building_ready(station)) { wait(); } else { work(station); } }
+} else { wait(); }

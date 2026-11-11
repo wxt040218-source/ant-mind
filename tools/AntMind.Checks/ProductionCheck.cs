@@ -8,40 +8,41 @@ internal static class ProductionCheck {
     public static async Task Run(Action<bool,string> check) {
         var config=ContentLoader.LoadDefault() with {InitialResourceNodes=0,Combat=new()};
         var world=Simulation.Create(config,42);
-        check(world.Objects.All<SourceView>().Length==12 && world.Objects.All<SourceView>().Count(x=>x.ItemType==FoodTypes.Fiber)==4,"sources are deterministic independent fruit and fiber records");
+        check(world.Objects.All<SourceView>().Length==12 && world.Objects.All<SourceView>().Count(x=>x.ItemType==FoodTypes.Wood)==4,"sources are deterministic independent fruit and wood records");
         var source=world.Objects.All<SourceView>()[0];
         var grown=new SourceGrowthRule().Apply(world with {Tick=100});
         check(grown.Objects.All<SourceView>()[0].Amount==source.Capacity,"full sources do not bank growth or overflow");
         var empty=source with {Amount=0};world=world with {Objects=world.Objects.Put(empty)};
         grown=new SourceGrowthRule().Apply(world with {Tick=200});
         check(((SourceView)grown.Objects.Find("source",source.Id)!).Amount==1 && grown.CreatedItems[FoodTypes.Fruit]==world.CreatedItems[FoodTypes.Fruit]+1,"renewal creates exactly one physical raw unit");
-        check(new FoodStore().Add(FoodTypes.Fiber,100).FoodTotal(config.Foods)==0,"construction fiber cannot finance eggs, upgrades or food reserves");
+        check(new FoodStore().Add(FoodTypes.Wood,100).FoodTotal(config.Foods)==0,"construction wood cannot finance eggs, upgrades or food reserves");
         var action=new ProductionActionRule();var work=new WorkRule();
         var point=Point.FromCells(64,64);
         var chef=new AntView(1,point,0,Species:AntSpeciesIds.Chef,Memory:Enumerable.Repeat(0,16).ToImmutableArray(),RecentDecisions:[]) {Health=10,MaxHealth=16};
         world=Simulation.Create(config,43);
         world=world with {Ants=[chef],Objects=world.Objects.Put(new BuildingView(1,point,"workshop")),NextBuildingId=2};
-        world=world with {Ants=[chef],Tick=1};
+        world=world with {NetworkLevel=2,Ants=[chef],Tick=1};
         WorldState Act(AntAction intent,int id,string type="",int qty=1,int recipe=0) {
             var a=world.Ants[0] with {Intent=intent,Production=new(id,type,qty,recipe),LastInteractionTick=-1000000};
             world=action.Apply(world with {Tick=world.Tick+1,Ants=[a]});return world;
         }
-        world=work.Apply(world with {Ants=[world.Ants[0] with {Intent=AntAction.Work,Production=new(1)}]});
-        check(world.Ants[0].ActionResult=="missing_materials" && ((BuildingView)world.Objects.Find("building",1)!).ConstructionWork==0,"blueprints cannot build without delivered fiber");
-        // Move real fiber from its natural holder through a hauler to construction.
-        var fiber=world.Objects.All<SourceView>().First(x=>x.ItemType==FoodTypes.Fiber);
-        world=world with {HaulerCarryLevel=10,Ants=[world.Ants[0] with {Species=AntSpeciesIds.Hauler,Position=fiber.Position}]};
-        Act(AntAction.Harvest,fiber.Id,qty:10);
-        check(world.Ants[0].Carry==10 && ((SourceView)world.Objects.Find("source",fiber.Id)!).Amount==20,"harvest transfers physical fiber with capacity checks");
-        world=world with {Ants=[world.Ants[0] with {Position=point}]};Act(AntAction.Deposit,1,FoodTypes.Fiber,10);
-        world=world with {Ants=[world.Ants[0] with {Position=fiber.Position}]};Act(AntAction.Harvest,fiber.Id,qty:2);
-        world=world with {Ants=[world.Ants[0] with {Position=point}]};Act(AntAction.Deposit,1,FoodTypes.Fiber,2);
+        world=work.Apply(world with {Ants=[world.Ants[0] with {Species=AntSpeciesIds.Builder,Intent=AntAction.Work,Production=new(1)}]});
+        check(world.Ants[0].ActionResult=="missing_materials" && ((BuildingView)world.Objects.Find("building",1)!).ConstructionWork==0,"blueprints cannot build without delivered wood");
+        // Move real wood from its natural holder through a hauler to construction.
+        var wood=world.Objects.All<SourceView>().First(x=>x.ItemType==FoodTypes.Wood);
+        world=world with {HaulerCarryLevel=10,Ants=[world.Ants[0] with {Species=AntSpeciesIds.Hauler,Position=wood.Position}]};
+        Act(AntAction.Harvest,wood.Id,qty:10);
+        check(world.Ants[0].Carry==10 && ((SourceView)world.Objects.Find("source",wood.Id)!).Amount==50,"harvest transfers physical wood with capacity checks");
+        world=world with {Ants=[world.Ants[0] with {Position=point}]};Act(AntAction.Deposit,1,FoodTypes.Wood,10);
+        world=world with {Ants=[world.Ants[0] with {Position=wood.Position}]};Act(AntAction.Harvest,wood.Id,qty:2);
+        world=world with {Ants=[world.Ants[0] with {Position=point}]};Act(AntAction.Deposit,1,FoodTypes.Wood,2);
         var site=(BuildingView)world.Objects.Find("building",1)!;
-        check(site.Store.Get(FoodTypes.Fiber)==12 && world.Stock.Get(FoodTypes.Fiber)==0,"construction materials are held at the site, never teleported from stock");
-        world=world with {Ants=[world.Ants[0] with {Species=AntSpeciesIds.Chef}]};
+        check(site.Store.Get(FoodTypes.Wood)==12 && world.Stock.Get(FoodTypes.Wood)==0,"construction materials are held at the site, never teleported from stock");
+        world=world with {Ants=[world.Ants[0] with {Species=AntSpeciesIds.Builder}]};
         for(var t=0;t<100;t++)world=work.Apply(world with {Tick=world.Tick+1,Ants=[world.Ants[0] with {Intent=AntAction.Work,Production=new(1)}]});
         site=(BuildingView)world.Objects.Find("building",1)!;
-        check(site.Phase=="ready" && site.Store.Total==0 && world.ConsumedItems[FoodTypes.Fiber]==12,"chef completes 200 effective construction ticks in 100 ticks and consumes materials once");
+        check(site.Phase=="ready" && site.Store.Total==0 && world.ConsumedItems[FoodTypes.Wood]==12,"builder completes 200 effective construction ticks in 100 ticks and consumes materials once");
+        world=world with {Ants=[world.Ants[0] with {Species=AntSpeciesIds.Chef}]};
         // Two newly harvested fruit -> one concentrate -> first nest admission = two raw points.
         var fruit=world.Objects.All<SourceView>().First(x=>x.ItemType==FoodTypes.Fruit);
         world=world with {Ants=[world.Ants[0] with {Carry=0,Position=fruit.Position,WorkTicksRemaining=0}]};
@@ -66,7 +67,7 @@ internal static class ProductionCheck {
         check(eaten.Ants[0].Health==11 && eaten.Ants[0].Carry==0 && eaten.FirstAdmissionPoints==2,"concentrated food heals through the existing explicit eating channel without minting income");
         var meal=world.Config.Production.Recipes.Single(x=>x.Input==FoodTypes.Meat);
         check(meal.Output==FoodTypes.Meal && world.Config.Foods.Single(x=>x.Id==meal.Output).HealAmount==12,"meat processing is a separate registered edible recipe");
-        var p=new Perception(1,1,point,point,0,null,128,128,[],Memory:Enumerable.Repeat(0,16).ToImmutableArray()) {FoodDefinitions=config.Foods,Sources=[fruit],Buildings=[site]};
+        var p=new Perception(1,1,point,point,0,null,128,128,[],Memory:Enumerable.Repeat(0,16).ToImmutableArray()) {TechnologyLevel=2,Recipes=config.Production.Recipes,FoodDefinitions=config.Foods,BuildingTypes=config.Production.Buildings,Sources=[fruit],Buildings=[site with {Store=new FoodStore().Add(FoodTypes.Fruit,2)}]};
         var dsl=AntDslCompiler.Compile("let s=source_id_at(0); if(source_amount(s)>0){harvest(s,1);} else {withdraw(building_id_at(0),food_concentrate,1);}").Execute(p,new(64));
         check(dsl.Error is null && dsl.Action==AntAction.Harvest,"DSL queries local sources and emits explicit production intentions within budget");
         var chefScript=AntDslCompiler.Compile(DefaultProgramSources.Chef).Execute(p with {Order=new(1,"kitchen","",point,point,point) {Parameters=ImmutableDictionary<string,int>.Empty.Add("station",1).Add("recipe",1)}},new(64));
@@ -84,7 +85,7 @@ internal static class ProductionCheck {
         check(interrupted.Ants[0].ActionResult=="work_interrupted" && ((BuildingView)interrupted.Objects.Find("building",1)!).WorkInProgress.Total==2,"damage interrupts labor while preserving station inputs and progress");
         var emptied=new InteractionRule().Apply(world with {Tick=2100,Resources=[new ResourceView(99,point,1,0) {Credits=[new(1,1)],CreditTracked=true}],Ants=[chef with {Intent=AntAction.Pickup}]});
         check(((ResourceView)emptied.Objects.Find("food",99)!).Credits.IsEmpty,"depleted ground tombstones release their remaining provenance metadata");
-        check(AntDslCompiler.Compile("harvest(1,item_code(\"fiber\"));").Execute(p,new(64)).Production.Quantity==3,"stable item IDs resolve independently of hardcoded numeric literals");
+        check(AntDslCompiler.Compile("harvest(1,item_code(\"wood\"));").Execute(p,new(64)).Production.Quantity==8,"stable item IDs resolve independently of hardcoded numeric literals");
         // Public API discovery and real save/restore through actor.
         var saves=Path.Combine(Directory.GetCurrentDirectory(),"artifacts","check-saves",Guid.NewGuid().ToString("N"));
         await using var session=new GameSession(config,42,savesPath:saves);

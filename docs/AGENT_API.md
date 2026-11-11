@@ -1,3 +1,16 @@
+> v0.19：中转站升级为仓储与食物补给据点，保留稳定cache节点供以后运输系统使用；eat_from与本地补给查询见 [OUTPOSTS.md](OUTPOSTS.md)。wire18／content15／save5，兼容已知save1～4旧档。
+
+> v0.18：wire17／content14／save4；标准供给目标使用首次入巢点，新增整群当前／激活状态预检和重复程序告警汇总／恢复。完整说明见 [PRIORITY_FIXES_V018.md](PRIORITY_FIXES_V018.md)；下方旧版本记录须对照当前入口。
+
+
+> v0.16.1导航更新：`set_target(x,y)` 设置持续目标，任意方向固定点移动；`move_to` 兼容。新增 `has_target`、`target_x/y`、`target_distance`、`target_reached`；详见 [FREE_MOVEMENT.md](FREE_MOVEMENT.md)。消息／存档形状保持。
+
+> v0.16当前接口：wire15 / content13 / save4。建筑定义 MaterialType/MaterialCost/BuilderSpecies，工地 ConstructionItem；新增 food_wood、species_builder、building_phase(id)、building_material(id)、building_cost(id)。PlanBuild新增公开建筑／蚁后2格间距校验，仅建筑蚁可施工；详细规则和示例见 [BUILDINGS_WOOD.md](BUILDINGS_WOOD.md)。
+
+> v0.15 当前增量：wire14 / content12 / save3；每只蚂蚁独立三级经验，固定点属性加成与探索去重，规则47/48结算。新增 F12 游戏内控制台及 tools/AntMind.Console，共用受控命令解析；详见 [ANT_LEVELS_CONSOLE.md](ANT_LEVELS_CONSOLE.md)。旧版本说明仍作历史，不把本轮本地验证当成远端 CI。
+
+> v0.14 当前规则：wire=13 / content=11 / save=2。科技就是虫群网络等级；厨房／厨师／浓缩二级，蛋白餐三级，混合营养餐四级，盛宴五级。升级用 DevelopmentValue 精确支付并保存找零，Inventory 仍为实物份数；配方 ExtraInputs 原子预留，来源汇总。完整现行说明和验证见 [TECH_FOOD_VALUE.md](TECH_FOOD_VALUE.md)，下方 v0.13 及更早的单输入、无价值差异、无旧档迁移等说明是历史记录。
+
 > 当前 v0.13：wire=12、content=10、save=1。最新生产／存档接口见本文末尾 v0.13 节和 PRODUCTION.md。小组仅存数据，所有组共用每蚁种程序；Visibility、Recruit、SetQueenRange、组程序已停用。优先先读 AGENT_START_HERE.md 和 MVP_SPEC.md；下方旧版本演进描述不代表当前可用接口。
 
 # Agent 操作接口 v11
@@ -106,3 +119,14 @@ python scripts/game-agent.py apply --species hauler --source content/programs/ha
 最小操作顺序：观察→计划箱子／加工台→组内配置材料源和目的地→更新共享搬运代码→实际送纤维并 work→process / work→withdraw→deposit(0,物品,数量)。通信和物理操作都须由 DSL 明确发出。
 
 可复验演示：新局暂停 T0 时执行 `python scripts/production-demo.py`。脚本先保存 before-production-demo，全部采集／施工／加工只经官方 MCP，结束保存 production-demo；已有运行局不会被它自动重置。完整证据位于 artifacts/agent-live/production-*.json。
+
+
+## v0.14 实际增量
+
+get_catalog 新增 TechnologyLevel、TechnologyEra、TechnologyEras、Unlocks、DevelopmentValue；Items 含 Value，Recipes 含 ExtraInputs 和 BuildingType。observe 含 StoredFoodValue、DevelopmentChange、ProcessingValueAdded 和全部解锁信息。TechnologyLevel 等于 NetworkLevel；升级命令仍是 UpgradeNetwork。PlanBuild(workshop) 和 HatchEgg(chef) 至少二级，process／work 在核心再次校验建筑与配方。
+
+MinimumReserve 现在是价值点；发展费用接口不变。evaluate_save 分支报告增加 ProcessingValueAdded、DevelopmentValueDelta。LoadGame 支持 format=1/protocol=12 在内存迁移，原文件不改。演示现在先把最低储备设为 20 并花 60 点升二级，再按原流程施工／加工；输出默认写 artifacts/agent-live/v014-production，可用 --output-dir 更换。不要为旧的一等厨房绕过解锁或免费提升存档等级。
+
+## v0.15 个体等级与控制台
+
+observe.Ants 和 inspect_object(ant,id) 含 Level、Experience、CompletedWork、工作余数和最近经验来源；observe／get_catalog 含 AntLevels 配置。所有旧管理命令继续支持，个体成长由真实行为结算，未开放直接注入经验。F12／CLI 共用受过滤的 Gateway：可 status、ants、inspect、pause、step、save/load、apply/rollback、eval 或 execute CommandKind JSON；工具清单仍为9个，无重复世界。

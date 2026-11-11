@@ -2,33 +2,33 @@
 if (group_id > 0) {
     if (carry > 0) {
         if (at_nest) { deliver(); }
-        else { move_to(nest_x,nest_y); }
+        else { set_target(nest_x,nest_y); }
     } else if (group_order_version == 0) {
-        request_queen_info(); move_to(nest_x,nest_y);
+        request_queen_info(); set_target(nest_x,nest_y);
     } else {
         if (queen_connected) { report_discovery(); request_queen_info(); }
         if (group_task == task_collect) {
             if (job_food_amount > 0) {
                 if (job_food_distance <= 1000) { pickup_from(job_food_id); }
-                else { move_to(job_food_x,job_food_y); }
-            } else if (job_queen_amount > 0) { move_to(job_queen_x,job_queen_y); }
-            else { move_to(job_explore_x,job_explore_y); }
-        } else if (group_task == task_explore) { move_to(job_explore_x,job_explore_y); }
-        else { move_to(objective_x,objective_y); }
+                else { set_target(job_food_x,job_food_y); }
+            } else if (job_queen_amount > 0) { set_target(job_queen_x,job_queen_y); }
+            else { set_target(job_explore_x,job_explore_y); }
+        } else if (group_task == task_explore) { set_target(job_explore_x,job_explore_y); }
+        else { set_target(objective_x,objective_y); }
     }
 } else {
 let mode = memory[0];
 if (carry > 0) {
     memory[0] = 0;
     if (at_nest) { deliver(); }
-    else { move_to(nest_x, nest_y); }
+    else { set_target(nest_x, nest_y); }
 } else if (mode == 1) {
     if (action_status != 1) {
         if (nearest_distance <= 1000) { pickup(); }
         else {
             memory[1] = memory[1] + 1;
             memory[0] = 2;
-            move_to(nest_x, nest_y);
+            set_target(nest_x, nest_y);
         }
     }
 } else if (mode == 2) {
@@ -38,7 +38,7 @@ if (carry > 0) {
         memory[2] = tick;
         memory[0] = 3;
         wait();
-    } else { move_to(nest_x, nest_y); }
+    } else { set_target(nest_x, nest_y); }
 } else if (mode == 3) {
     report_discovery();
     request_queen_info();
@@ -51,10 +51,10 @@ if (carry > 0) {
     }
     if (queen_count > 0) {
         memory[1] = memory[1] % queen_count;
-        move_to(queen_x_at(memory[1]), queen_y_at(memory[1]));
+        set_target(queen_x_at(memory[1]), queen_y_at(memory[1]));
         memory[0] = 1;
     } else if (nearest_distance <= 1000) { pickup(); }
-    else { move_to(explore_x, explore_y); }
+    else { set_target(explore_x, explore_y); }
 }
 
 }

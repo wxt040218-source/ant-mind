@@ -1,5 +1,5 @@
 {
-  "schemaVersion": 10,
+  "schemaVersion": 15,
   "id": "antmind.world.default",
   "world": {
     "width": 128,
@@ -23,28 +23,52 @@
       {
         "id": "fruit",
         "name": "水果",
-        "healAmount": 3
+        "healAmount": 3,
+        "value": 1
       },
       {
         "id": "meat",
         "name": "肉",
-        "healAmount": 6
+        "healAmount": 6,
+        "value": 1
       },
       {
         "id": "fiber",
         "name": "植物纤维",
         "healAmount": 0,
-        "edible": false
+        "edible": false,
+        "value": 0
       },
       {
         "id": "fruit_concentrate",
         "name": "水果浓缩",
-        "healAmount": 6
+        "healAmount": 6,
+        "value": 3
       },
       {
         "id": "protein_meal",
         "name": "蛋白餐",
-        "healAmount": 12
+        "healAmount": 12,
+        "value": 4
+      },
+      {
+        "id": "balanced_meal",
+        "name": "均衡营养餐",
+        "healAmount": 24,
+        "value": 10
+      },
+      {
+        "id": "royal_feast",
+        "name": "蚁王盛宴",
+        "healAmount": 60,
+        "value": 28
+      },
+      {
+        "id": "wood",
+        "name": "木材",
+        "healAmount": 0,
+        "edible": false,
+        "value": 0
       }
     ],
     "brainBudgets": [
@@ -76,7 +100,8 @@
         "emptyMoveUnitsPerTick": 200,
         "loadedMoveUnitsPerTick": 20,
         "carryCapacity": 1,
-        "visionCells": 6
+        "visionCells": 6,
+        "requiredNetworkLevel": 1
       },
       {
         "id": "hauler",
@@ -85,7 +110,8 @@
         "emptyMoveUnitsPerTick": 120,
         "loadedMoveUnitsPerTick": 60,
         "carryCapacity": 1,
-        "visionCells": 3
+        "visionCells": 3,
+        "requiredNetworkLevel": 1
       },
       {
         "id": "soldier",
@@ -97,7 +123,8 @@
         "visionCells": 8,
         "maxHealth": 40,
         "attackDamage": 6,
-        "attackCooldownTicks": 10
+        "attackCooldownTicks": 10,
+        "requiredNetworkLevel": 1
       },
       {
         "id": "chef",
@@ -108,7 +135,20 @@
         "carryCapacity": 2,
         "visionCells": 4,
         "maxHealth": 16,
-        "workRate": 2
+        "workRate": 2,
+        "requiredNetworkLevel": 2
+      },
+      {
+        "id": "builder",
+        "name": "建筑蚁",
+        "initialCount": 0,
+        "emptyMoveUnitsPerTick": 110,
+        "loadedMoveUnitsPerTick": 70,
+        "carryCapacity": 2,
+        "visionCells": 4,
+        "maxHealth": 20,
+        "workRate": 2,
+        "requiredNetworkLevel": 1
       }
     ],
     "carryMultipliers": [
@@ -170,8 +210,8 @@
       {
         "id": "deliver-50",
         "title": "稳定供给",
-        "description": "累计送回 50 份食物",
-        "metric": "delivered",
+        "description": "新食物首次入巢达到 50 点",
+        "metric": "first_admission_points",
         "target": 50,
         "prerequisites": [],
         "timeLimitTicks": 0
@@ -201,8 +241,8 @@
       {
         "id": "supply-sprint",
         "title": "运输冲刺",
-        "description": "解锁后 10 分钟内累计总交付达到 200",
-        "metric": "delivered",
+        "description": "解锁后 10 分钟内新食物累计首次入巢达到 200 点",
+        "metric": "first_admission_points",
         "target": 200,
         "prerequisites": [
           "deliver-50"
@@ -226,10 +266,64 @@
     "production": {
       "enabled": true,
       "fruitSources": 8,
-      "fiberSources": 4,
+      "fiberSources": 0,
       "fruitCapacity": 5,
       "growthTicks": 100,
-      "fiberCapacity": 30
+      "fiberCapacity": 30,
+      "woodSources": 4,
+      "woodCapacity": 60,
+      "woodGrowthTicks": 600,
+      "buildings": [
+        {
+          "id": "cache",
+          "name": "中转据点",
+          "canFeedAnts": true,
+          "materialCost": 6,
+          "materialType": "wood",
+          "builderSpecies": "builder",
+          "buildTicks": 100,
+          "capacity": 40,
+          "requiredNetworkLevel": 1
+        },
+        {
+          "id": "workshop",
+          "name": "厨房",
+          "materialCost": 12,
+          "materialType": "wood",
+          "builderSpecies": "builder",
+          "buildTicks": 200,
+          "capacity": 20,
+          "requiredNetworkLevel": 2
+        }
+      ]
+    },
+    "veterancy": {
+      "thresholds": [
+        0,
+        30,
+        120
+      ],
+      "movePercent": [
+        100,
+        110,
+        125
+      ],
+      "workPercent": [
+        100,
+        125,
+        150
+      ],
+      "damagePercent": [
+        100,
+        125,
+        150
+      ],
+      "healthPercent": [
+        100,
+        125,
+        150
+      ],
+      "workUnitsPerExperience": 10
     }
   }
 }

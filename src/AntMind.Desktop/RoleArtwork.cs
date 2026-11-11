@@ -10,13 +10,15 @@ internal static class RoleArtwork {
     private sealed record Artwork(Bitmap Bitmap,bool FacesRight);
     private static readonly Dictionary<string,Artwork> Roles=new(StringComparer.Ordinal) {
         ["queen"]=Load("queen",false),[AntSpeciesIds.Scout]=Load("scout",true),
-        [AntSpeciesIds.Hauler]=Load("hauler",false),[AntSpeciesIds.Soldier]=Load("soldier",true)
+        [AntSpeciesIds.Hauler]=Load("hauler",false),[AntSpeciesIds.Soldier]=Load("soldier",true),
+        [AntSpeciesIds.Chef]=Load("chef",true),[AntSpeciesIds.Builder]=Load("builder",true),
+        ["world:cache"]=LoadWorld("cache"),["world:workshop"]=LoadWorld("workshop"),["world:beetle"]=LoadWorld("beetle")
     };
     private static Artwork Load(string role,bool facesRight)=>new(new Bitmap(AssetLoader.Open(
         new Uri($"avares://AntMind.Desktop/Assets/Roles/{role}.png"))),facesRight);
+    private static Artwork LoadWorld(string name)=>new(new Bitmap(AssetLoader.Open(new Uri($"avares://AntMind.Desktop/Assets/World/{name}.png"))),true);
     public static void Draw(DrawingContext context,string role,Rect box,bool? facesRight=null) {
-        var chef=role==AntSpeciesIds.Chef;
-        if(!Roles.TryGetValue(chef?AntSpeciesIds.Scout:role,out var art) || box.Width<=0 || box.Height<=0) return;
+        if(!Roles.TryGetValue(role,out var art) || box.Width<=0 || box.Height<=0) return;
         var size=art.Bitmap.PixelSize;
         var scale=Math.Min(box.Width/size.Width,box.Height/size.Height);
         var width=size.Width*scale;var height=size.Height*scale;
@@ -25,15 +27,5 @@ internal static class RoleArtwork {
             using var mirror=context.PushTransform(Matrix.CreateScale(-1,1)*Matrix.CreateTranslation(2*box.Center.X,0));
             context.DrawImage(art.Bitmap,new Rect(0,0,size.Width,size.Height),destination);
         } else context.DrawImage(art.Bitmap,new Rect(0,0,size.Width,size.Height),destination);
-        if(chef) {
-            // Temporary code-native chef hat; retain the established body pixels.
-            var hat=new Rect(box.X+box.Width*.3,box.Y+box.Height*.13,box.Width*.42,box.Height*.19);
-            context.FillRectangle(GameTheme.Brush("#352326"),hat.Inflate(box.Width*.025));
-            context.FillRectangle(GameTheme.Brush("#FFF8E8"),hat);
-            var top=new Rect(hat.X-box.Width*.04,hat.Y-box.Height*.08,hat.Width+box.Width*.08,box.Height*.11);
-            context.FillRectangle(GameTheme.Brush("#352326"),top.Inflate(box.Width*.018));
-            context.FillRectangle(GameTheme.Brush("#FFF8E8"),top);
-            context.FillRectangle(GameTheme.Brush("#BBA488"),new Rect(hat.X,hat.Bottom-box.Height*.035,hat.Width,box.Height*.035));
-        }
     }
 }

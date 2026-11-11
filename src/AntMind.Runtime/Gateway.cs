@@ -3,6 +3,11 @@ using System.Collections.Immutable;
 namespace AntMind.Runtime;
 public static class Gateway {
     public static async Task<WireResponse> DispatchAsync(GameSession session, WireRequest request, CancellationToken ct) => request.Method switch {
+        "summary"=>new(Protocol.Version,Summary:await session.ObserveSummaryAsync(ct)),
+        "watch" when request.Watch is {} watch=>await Watch(session,watch,ct),
+        "events" when request.Events is {} events=>await Events(session,events,ct),
+        "preview_program" when request.Preview is {} preview=>await Preview(session,preview,ct),
+        "preview_program_batch" when request.Preview is {} batch=>await PreviewBatch(session,batch,ct),
         "evaluate_save" when request.Evaluation is {} eval=>Evaluate(session,eval,ct),
         "list_saves"=>new(Protocol.Version,Saves:session.ListSaves().Select(s=>new SaveMetadata(s.Slot,s.Bytes,s.ModifiedUtc)).ToImmutableArray()),
         "observe" => new(Protocol.Version, Snapshot: await session.ObserveAsync(ct: ct)),
@@ -12,6 +17,20 @@ public static class Gateway {
         "inspect_object" => await Inspect(session, request, ct),
         _ => new(Protocol.Version, Error: "unknown_method")
     };
+    private static async Task<WireResponse> Watch(GameSession session,WatchRequest request,CancellationToken ct) {
+        var result=await session.ConfigureWatchAsync(request,ct);return new(Protocol.Version,Error:result.Error,Watches:result);
+    }
+    private static async Task<WireResponse> Events(GameSession session,EventReadRequest request,CancellationToken ct) {
+        var result=await session.ReadEventsAsync(request,ct);return new(Protocol.Version,Error:result.Error,Events:result);
+    }
+    private static async Task<WireResponse> Preview(GameSession session,PreviewRequest request,CancellationToken ct) {
+        try {return new(Protocol.Version,Preview:await session.PreviewProgramAsync(request,ct));}
+        catch(Exception ex) when(ex is FormatException or ArgumentException) {return new(Protocol.Version,Error:"invalid_preview: "+ex.Message);}
+    }
+    private static async Task<WireResponse> PreviewBatch(GameSession session,PreviewRequest request,CancellationToken ct) {
+        try {return new(Protocol.Version,PreviewBatch:await session.PreviewProgramBatchAsync(request,ct));}
+        catch(Exception ex) when(ex is FormatException or ArgumentException) {return new(Protocol.Version,Error:"invalid_preview: "+ex.Message);}
+    }
     private static WireResponse Evaluate(GameSession session,EvaluationRequest request,CancellationToken ct) {
         try {return new(Protocol.Version,Evaluation:session.EvaluateSave(request,ct));}
         catch(Exception ex) when(ex is ArgumentException or System.Text.Json.JsonException or IOException or FormatException) {return new(Protocol.Version,Error:"invalid_evaluation: "+ex.Message);}

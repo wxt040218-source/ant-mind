@@ -1,0 +1,44 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Read-only reasoning cases for v0.17 with the default content13 catalog. No world edits required. -->
+<evaluation>
+  <qa_pair>
+    <question>只用get_actions与get_catalog：如果同时需要解锁厨房和专职厨师，最低虫群科技是几级？只答整数。</question>
+    <answer>2</answer>
+  </qa_pair>
+  <qa_pair>
+    <question>结合动作目录的施工规则与建筑目录：两种新蓝图共同要求哪种职业完成施工？给出职业ID，不要把厨师较高工作率当作施工资格。</question>
+    <answer>builder</answer>
+  </qa_pair>
+  <qa_pair>
+    <question>结合建筑和物品目录及动作规则：新中转站与新厨房共同消耗、不能当食物支付科技的建材是什么？只答物品ID，排除旧档兼容建材。</question>
+    <answer>wood</answer>
+  </qa_pair>
+  <qa_pair>
+    <question>读完整混合配方和各物品价值：第四级科技的均衡营养餐，每批产出价值减去全部原料价值是多少？只答整数。</question>
+    <answer>3</answer>
+  </qa_pair>
+  <qa_pair>
+    <question>结合科技目录、配方及物品价值：最高科技的宴席配方每批比原料增加多少价值？不重复计入原料之前加工增值，只答整数。</question>
+    <answer>8</answer>
+  </qa_pair>
+  <qa_pair>
+    <question>读配方、解锁与回血目录：比较三级科技前可做的水果浓缩和三级蛋白餐，哪种每价值点提供的回血更多？只答产出物品ID。</question>
+    <answer>protein_meal</answer>
+  </qa_pair>
+  <qa_pair>
+    <question>结合职业、个体等级目录与移动规则：同一搬运蚁、同一实际负重，三级相对一级的身体移动倍率提高多少百分比？只答不带百分号的整数。</question>
+    <answer>25</answer>
+  </qa_pair>
+  <qa_pair>
+    <question>阅读工具目录及get_actions，比较完整观测和精简摘要：完成只读候选程序检查后，应该使用哪个新增工具获取任务版本回执，同时避免每次返回职业源码与历史？只答工具名。</question>
+    <answer>observe_summary</answer>
+  </qa_pair>
+  <qa_pair>
+    <question>结合事件工具说明与get_actions：游戏读档后，旧警戒游标不能直接接着用。用精简摘要取得哪一个身份字段才能重新注册正确世界的监控？只答JSON字段名。</question>
+    <answer>WorldId</answer>
+  </qa_pair>
+  <qa_pair>
+    <question>结合工具描述与get_actions的程序／小组规则：要完整提交同种共享代码之下的自由任务参数、坐标和精确成员名单，并让非法成员导致整批失败，应使用哪个新增工具？只答工具名。</question>
+    <answer>configure_group</answer>
+  </qa_pair>
+</evaluation>

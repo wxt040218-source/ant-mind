@@ -5,12 +5,16 @@ public static class FoodTypes {
     public const string Fruit = "fruit";
     public const string Meat = "meat";
     public const string Fiber = "fiber";
+    public const string Wood = "wood";
     public const string Concentrate = "fruit_concentrate";
     public const string Meal = "protein_meal";
+    public const string Balanced = "balanced_meal";
+    public const string Royal = "royal_feast";
 }
 public sealed record FoodDefinition(string Id, string Name, int HealAmount) {
     public bool Edible {get;init;}=true;
     public int UnitMass {get;init;}=1;
+    public int Value {get;init;}=1;
 }
 public static class GroupActivities {
     public const string Collect="collect";
@@ -51,6 +55,21 @@ public sealed record FoodStore {
         return (Add(type,-quantity),taken);
     }
     public long FoodTotal(IEnumerable<FoodDefinition> definitions)=>definitions.Where(x=>x.Edible).Sum(x=>Get(x.Id));
+    public long FoodValue(IEnumerable<FoodDefinition> definitions)=>definitions.Where(x=>x.Edible).Sum(x=>checked(Get(x.Id)*x.Value));
+    // Whole items are consumed; excess value becomes change, never a lost fraction or a physical item.
+    public (FoodStore Store,long Change) PayValue(long cost,long change,IEnumerable<FoodDefinition> definitions) {
+        var items=definitions.Where(x=>x.Edible).OrderBy(x=>x.Value).ThenBy(x=>x.Id,StringComparer.Ordinal).ToArray();
+        if(cost<0 || change<0 || cost>checked(FoodValue(items)+change))throw new InvalidOperationException("Insufficient food value.");
+        var fromChange=Math.Min(cost,change);cost-=fromChange;change-=fromChange;
+        var next=this;
+        foreach(var item in items) {
+            if(cost==0)break;
+            var quantity=Math.Min(next.Get(item.Id),checked((cost-1)/item.Value+1));
+            var paid=checked(quantity*item.Value);next=next.Add(item.Id,-quantity);
+            if(paid>=cost){change=checked(change+paid-cost);cost=0;}else cost-=paid;
+        }
+        return (next,change);
+    }
     public FoodStore SpendFood(long amount,IEnumerable<FoodDefinition> definitions) {
         if(amount<0 || amount>FoodTotal(definitions))throw new InvalidOperationException("Insufficient food.");
         var next=this;

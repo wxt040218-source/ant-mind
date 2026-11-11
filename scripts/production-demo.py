@@ -4,6 +4,7 @@ Requires a paused, fresh desktop world. Only discovered source coordinates are u
 No stock, materials, food or positions are injected. Leaves a paused saved demonstration.
 """
 import json
+import argparse
 import os
 from pathlib import Path
 import queue
@@ -15,6 +16,10 @@ ROOT = Path(__file__).resolve().parents[1]
 
 
 def main():
+    parser=argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--output-dir",type=Path,default=ROOT/"artifacts/agent-live/v016-production")
+    evidence=parser.parse_args().output_dir
+    evidence.mkdir(parents=True,exist_ok=True)
     env = os.environ.copy()
     exe = ROOT / ".tools/dotnet/dotnet.exe"
     process = subprocess.Popen([str(exe) if exe.exists() else "dotnet", str(ROOT / "src/AntMind.Mcp/bin/Debug/net10.0/AntMind.Mcp.dll")],
@@ -80,7 +85,7 @@ def main():
         for key, value in dict(to=target, source=source, **{"from": from_holder}, item=item).items():
             param(1, key, value)
     def save_evidence(label):
-        path=ROOT / "artifacts/agent-live" / (label+".json")
+        path=evidence / (label+".json")
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(json.dumps(state, ensure_ascii=False, indent=2), encoding="utf-8")
     try:
@@ -92,48 +97,57 @@ def main():
             raise RuntimeError("Demo requires a fresh paused world and does not reset an existing colony.")
         command("SaveGame",key="before-production-demo")
         fruit=next(s for s in state["Sources"] if s["ItemType"]=="fruit")
-        fiber=next(s for s in state["Sources"] if s["ItemType"]=="fiber")
+        wood=next(s for s in state["Sources"] if s["ItemType"]=="wood")
+        wood_code=next(i+1 for i,f in enumerate(state["FoodTypes"]) if f["Id"]=="wood")
         nest=state["Nest"]
         cache_pos=dict(X=nest["X"],Y=nest["Y"]+2000)
-        station_pos=dict(X=nest["X"]+1000,Y=nest["Y"])
+        station_pos=dict(X=nest["X"]+3000,Y=nest["Y"])
+        command("SetMinimumReserve",value=0)
+        command("UpgradeNetwork")
         cache=int(command("PlanBuild",key="cache",pointX=cache_pos["X"],pointY=cache_pos["Y"])["Detail"])
         station=int(command("PlanBuild",key="workshop",pointX=station_pos["X"],pointY=station_pos["Y"])["Detail"])
         command("ProduceEgg")
         command("HatchEgg",species="chef")
+        command("ProduceEgg")
+        command("HatchEgg",species="builder")
         command("CreateGroup",name="Production logistics",task="Agent routes physical items",activity="logistics")
         command("AssignAnts",groupId=1,antIds=[a["Id"] for a in state["Ants"] if a["Species"]=="hauler"])
-        command("CreateGroup",name="Kitchen",task="Build and process",activity="kitchen",objectiveX=cache_pos["X"],objectiveY=cache_pos["Y"])
+        command("CreateGroup",name="Kitchen",task="Build sites",activity="kitchen",objectiveX=cache_pos["X"],objectiveY=cache_pos["Y"])
         state=observe()
-        command("AssignAnts",groupId=2,antIds=[a["Id"] for a in state["Ants"] if a["Species"]=="chef"])
+        command("AssignAnts",groupId=2,antIds=[a["Id"] for a in state["Ants"] if a["Species"]=="builder"])
         param(2,"station",cache)
         param(2,"recipe",1)
         source='''if(queen_connected){request_queen_info();}
 if(carry>0){
-  if(max(abs(x-group_x("drop")),abs(y-group_y("drop")))>1000){move_to(group_x("drop"),group_y("drop"));}
+  if(max(abs(x-group_x("drop")),abs(y-group_y("drop")))>1000){set_target(group_x("drop"),group_y("drop"));}
   else{deposit(param("to"),carry_food_type,carry);}
 }else{
-  if(max(abs(x-group_x("take")),abs(y-group_y("take")))>1000){move_to(group_x("take"),group_y("take"));}
+  if(max(abs(x-group_x("take")),abs(y-group_y("take")))>1000){set_target(group_x("take"),group_y("take"));}
   else{if(param("source")>0){harvest(param("source"),capacity);}else{withdraw(param("from"),param("item"),capacity);}}
 }'''
         validation=tool("validate_program",source=source)
         if not validation["valid"]:
             raise RuntimeError(validation)
         command("ApplyProgram",species="hauler",programSource=source)
-        route(cache,cache_pos,fiber["Position"],source=fiber["Id"])
+        route(cache,cache_pos,wood["Position"],source=wood["Id"],item=wood_code)
         until(lambda s:any(b["Id"]==cache and b["Phase"]=="ready" for b in s["Buildings"]))
         save_evidence("production-cache")
         print("Built cache",state["Tick"],flush=True)
-        route(station,station_pos,fiber["Position"],source=fiber["Id"])
+        route(station,station_pos,wood["Position"],source=wood["Id"],item=wood_code)
         command("UpdateGroup",groupId=2,name="Kitchen",objectiveX=station_pos["X"],objectiveY=station_pos["Y"])
         param(2,"station",station)
         until(lambda s:any(b["Id"]==station and b["Phase"]=="ready" for b in s["Buildings"]))
         save_evidence("production-workshop")
         print("Built workshop",state["Tick"],flush=True)
+        command("CreateGroup",name="Chef",task="Process fruit",activity="kitchen",objectiveX=station_pos["X"],objectiveY=station_pos["Y"])
+        command("AssignAnts",groupId=3,antIds=[a["Id"] for a in state["Ants"] if a["Species"]=="chef"])
+        param(3,"station",station)
+        param(3,"recipe",1)
         # Clear excess construction cargo into cache before changing the payload type.
-        route(cache,cache_pos,fiber["Position"],source=fiber["Id"])
+        route(cache,cache_pos,wood["Position"],source=wood["Id"],item=wood_code)
         command("AssignAnts",groupId=1,antIds=[a["Id"] for a in state["Ants"] if a["Species"]=="hauler"])
-        # Stop new harvest by using empty nest fiber as the origin.
-        route(cache,cache_pos,nest,item=3)
+        # Stop new harvest by using empty nest wood as the origin.
+        route(cache,cache_pos,nest,item=wood_code)
         until(lambda s:all(a["Carry"]==0 for a in s["Ants"] if a["Species"]=="hauler"),400)
         # Put newly harvested fruit into the cache, then deliver it to the workshop.
         route(cache,cache_pos,fruit["Position"],source=fruit["Id"],item=1)
@@ -142,7 +156,7 @@ if(carry>0){
         until(lambda s:next(b for b in s["Buildings"] if b["Id"]==station)["Output"]["Amounts"].get("fruit_concentrate",0)>=1)
         save_evidence("production-batch")
         # Allow current fruit loads to settle; then collect outputs and admit them to nest.
-        route(station,station_pos,nest,item=3)
+        route(station,station_pos,nest,item=wood_code)
         until(lambda s:all(a["Carry"]==0 for a in s["Ants"] if a["Species"]=="hauler"),400)
         route(0,nest,station_pos,from_holder=station,item=4)
         until(lambda s:s["Stock"].get("fruit_concentrate",0)>=1)
@@ -150,7 +164,7 @@ if(carry>0){
         state=observe()
         save_evidence("production-complete")
         evaluated=tool("evaluate_save",slot="production-demo",ticks=100)
-        (ROOT/"artifacts/agent-live/production-evaluation.json").write_text(json.dumps(evaluated,ensure_ascii=False,indent=2),encoding="utf-8")
+        (evidence/"production-evaluation.json").write_text(json.dumps(evaluated,ensure_ascii=False,indent=2),encoding="utf-8")
         print(json.dumps(dict(tick=state["Tick"],stock=state["Stock"],firstAdmissionPoints=state["FirstAdmissionPoints"],buildings=state["Buildings"],chef=[a for a in state["Ants"] if a["Species"]=="chef"]),ensure_ascii=False,indent=2),flush=True)
     finally:
         process.stdin.close()

@@ -1,0 +1,62 @@
+[
+  {
+    "file": "src/AntMind.Desktop/Assets/Roles/chef.png",
+    "width": 1299,
+    "height": 1211,
+    "cornerAlpha": [
+      0,
+      0,
+      0,
+      0
+    ],
+    "sha256": "BCE3DB71EF120C2ED6A0E09B002640452EC02585BB1AA2E34C5354CBD39D1DAE"
+  },
+  {
+    "file": "src/AntMind.Desktop/Assets/Roles/builder.png",
+    "width": 1299,
+    "height": 1211,
+    "cornerAlpha": [
+      0,
+      0,
+      0,
+      0
+    ],
+    "sha256": "FAD1F377B94AB1D5CA72720375C8CE5B30D9855530D08C27F42BF200A72691E4"
+  },
+  {
+    "file": "src/AntMind.Desktop/Assets/World/cache.png",
+    "width": 1358,
+    "height": 1159,
+    "cornerAlpha": [
+      0,
+      0,
+      0,
+      0
+    ],
+    "sha256": "C2C5152D6145A57D3938FFB3A6547DAB806AABAA32D60652BC39FB687282AF67"
+  },
+  {
+    "file": "src/AntMind.Desktop/Assets/World/workshop.png",
+    "width": 1312,
+    "height": 1199,
+    "cornerAlpha": [
+      0,
+      0,
+      0,
+      0
+    ],
+    "sha256": "B91399624EF4E45B6AC237E85BA95CC66F694346419A1EDF9D46C38FB6BC337A"
+  },
+  {
+    "file": "src/AntMind.Desktop/Assets/World/beetle.png",
+    "width": 1455,
+    "height": 1081,
+    "cornerAlpha": [
+      0,
+      0,
+      0,
+      0
+    ],
+    "sha256": "637998F91B3005E74C40ADA43B46290F238DDFBABC3AE49C33B1192349A3FDF9"
+  }
+]

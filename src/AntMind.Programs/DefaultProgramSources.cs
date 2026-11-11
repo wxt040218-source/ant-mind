@@ -1,5 +1,6 @@
 namespace AntMind.Programs;
 public static class DefaultProgramSources {
+    public static string Builder { get; } = Read("builder");
     public static string Chef { get; } = Read("chef");
     public static string Soldier { get; } = Read("soldier");
     public static string Scout { get; } = Read("scout");

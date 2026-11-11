@@ -1,14 +1,24 @@
+> v0.19：中转站升级为仓储与食物补给据点，保留稳定cache节点供以后运输系统使用；eat_from与本地补给查询见 [OUTPOSTS.md](OUTPOSTS.md)。wire18／content15／save5，兼容已知save1～4旧档。
+
+> v0.18：wire17／content14／save4；标准供给目标使用首次入巢点，新增整群当前／激活状态预检和重复程序告警汇总／恢复。完整说明见 [PRIORITY_FIXES_V018.md](PRIORITY_FIXES_V018.md)；下方旧版本记录须对照当前入口。
+
+
+> v0.16：先读 BUILDINGS_WOOD.md。所有新蓝图需木材与建筑蚁，旧纤维工地保留；厨师及建筑／甲虫透明PNG已接入。
+
 # 给接手 Agent 的入口
 
-当前版本 v0.13，更新 2026-11-09。请把本页、当前代码和当前状态作为事实来源；版本归档、研究文档和实施草案不代表全部已经实现。
+当前版本v0.19，更新2026-11-11。本次增加中转据点仓储与食物补给回血，460项检查及实局施工、运输、治疗通过；保留v0.18供给目标修复、整群预检及告警汇总。请把本页、当前代码和当前状态作为事实来源；版本归档、研究文档和实施草案不代表全部已经实现。
 
 ## 先读这些
 
 1. 根目录 AGENTS.md：项目工作约定。
 2. PROJECT_STATUS.md：已完成、真实测试和未完成项，开始及结束任务均核对更新。
-3. docs/MVP_SPEC.md：当前玩法、初值和边界，wire=12 / content=10 / save=1。
-4. docs/PRODUCTION.md：最新源头、物流、加工、厨师、来源计分和存档的代码入口及验收证据。
-5. docs/FRAMEWORK.md、docs/LUNA_HANDOFF.md、docs/AGENT_API.md、docs/ANT_DSL.md：架构和接口。早期章节与当前规格冲突时，以本页和当前代码为准。
+3. docs/MVP_SPEC.md：当前玩法、初值和边界，wire=18 / content=15 / save=5。Agent事件／诊断和新DSL详见docs/AGENT_EVENTS.md。
+4. docs/BUILDINGS_WOOD.md：木材、专职建筑蚁、地图蓝图放置、save1～3迁移和新美术。
+5. docs/ANT_LEVELS_CONSOLE.md：个体军衔、经验、F12 和命令行调试。
+6. docs/TECH_FOOD_VALUE.md：当前五级科技、价值支付、混合食材与旧存档迁移。
+7. docs/PRODUCTION.md：最新源头、物流、加工、厨师、来源计分和存档的代码入口及验收证据。
+8. docs/FRAMEWORK.md、docs/LUNA_HANDOFF.md、docs/AGENT_API.md、docs/ANT_DSL.md：架构和接口。早期章节与当前规格冲突时，以本页和当前代码为准。
 
 本项目没有游戏引擎或网页端，主程序是 Windows x64 Avalonia 桌面。不要恢复 Godot，不要把 Core 写成 UI 代码，也不要自动开启其他 Agent 或替用户切换模型。
 
@@ -30,12 +40,15 @@ $env:AVALONIA_TELEMETRY_OPTOUT='1'
 
 ## 怎么实际玩
 
-项目没有运行中的永久 Agent 服务。游戏独立执行最后有效的各职业程序，Agent 只在用户任务内调用工具。已有官方 MCP 桥 src/AntMind.Mcp，工具：get_actions、get_catalog、observe、inspect_object、inspect_group、validate_program、command、list_saves、evaluate_save。
+项目没有运行中的永久 Agent 服务。游戏独立执行最后有效的各职业程序，Agent 只在用户任务内调用工具。官方 MCP 桥 src/AntMind.Mcp 共15工具：get_actions、get_catalog、observe、observe_summary、inspect_object、inspect_group、validate_program、preview_program、preview_program_batch、command、configure_group、watch_events、read_events、list_saves、evaluate_save。
 
 当前开发会话未原生装载游戏工具时，可以使用 Python 3 的 `scripts/game-agent.py`，它实际调用官方 STDIO 服务，并连接已经运行的宿主；没有启动第二个模拟世界，也不读 player 全图。
 
 ```powershell
 python scripts/game-agent.py observe --output artifacts/agent-live/observe.json
+python scripts/game-agent.py summary --output artifacts/agent-live/summary.json
+python scripts/game-agent.py watch --watch-action upsert --watch-id danger --name "Queen perimeter" --kinds enemy_entered_zone,queen_attacked,ant_died --radius 10
+python scripts/game-agent.py events --watch-id danger --after 0 --wait 30 --output artifacts/agent-live/events.json
 python scripts/game-agent.py apply --species chef --source content/programs/chef.ant --reason '更新厨师策略'
 python scripts/game-agent.py command --kind SaveGame --key checkpoint --reason '策略修改前保存'
 python scripts/game-agent.py command --kind LoadGame --key checkpoint --reason '恢复已验证检查点'
@@ -57,8 +70,14 @@ python scripts/game-agent.py command --kind LoadGame --key checkpoint --reason '
 
 ## 已验证和仍待完成
 
-当前 244 项检查通过，全解决方案 0 警告／0 错误。真实桌面 MCP 在 T201 建箱，T592 建加工台，T937 回巢 1 份水果浓缩、计 2 点，1 厨师末次 45／64 指令、无程序错误。同存档两条 100 Tick 分支都增加 2 点和 1 份浓缩，无死亡／程序错误。实际继续游戏和新窗口读取已验证。
+v0.17历史验收425项检查通过、全解决方案0警告／0错误。v0.18本轮验证以PROJECT_STATUS.md为准。v0.17实际桌面成功载入wire15旧档，在暂停T12007验证敌情入圈提醒、游标续读／超时、只读候选预览；真实MCP并发等待不阻塞命令且条件变化能唤醒。详细证据与会话边界见AGENT_EVENTS.md；当前运行状态以PROJECT_STATUS.md为准。
+
+经济和生产先前验证继续有效，详细证据与限制见 ANT_LEVELS_CONSOLE.md；本轮未做长期满人口成长平衡或每一个命令的人工验收。
 
 自动检查、原图与相机检查、真实 MCP、窗口目视分别记证据，不能混称完整玩法或性能证明。artifacts／bin／本机存档不上传 Git，其他开发者应自行运行检查与演示复验。
 
-尚未实现：能力型科技、身体模块、昼夜／环境、开拓、离线发展、自动存档、旧格式迁移、完整事件回放、长期墓碑压缩和观测分页。满人口长时性能与多种子生产平衡待做。Chef 图像是原型帽子，尚非定稿。下一步先做生产物流更多种子与规模的验证，再推进 M4／M5；完整候选需求在 EXPANSION_IMPLEMENTATION_PLAN.md。
+尚未实现：身体能力模块、昼夜／环境、开拓、离线发展、自动存档、未知／更早格式迁移、持久化完整事件回放、长期墓碑压缩和完整世界观测分页（事件已有分页）。满人口长时性能与多种子生产平衡待做。v0.16已接入独立厨师、建筑蚁、设施和甲虫插画。下一步先验证事件驱动经营与物流规模，再推进 M4／M5；完整候选需求在 EXPANSION_IMPLEMENTATION_PLAN.md。
+
+当前新接口：get_catalog 含科技阶段及完整解锁列表；Snapshot.DevelopmentValue 负责可支付价值、Inventory 仍为份数。recipe_unlocked 与 technology_level 读取蚂蚁显式请求的科技缓存。厨房／厨师二级，四级开始多输入配方，详情以 TECH_FOOD_VALUE.md 为准。本轮修改在本地，旧 GitHub CI 记录只对应 v0.13。
+
+当前个体等级不改变共享程序归属。inspect ant 与 ants 查询可看 Level／Experience／CompletedWork；DSL 可按 ant_level、experience、experience_to_next 和自身属性选择策略。新的 CLI 项目使解决方案共10个项目，依赖图仍保持核心隔离。当前save5接受已知save1～4，原存档不改写。

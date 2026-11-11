@@ -1,5 +1,5 @@
 // Set an objective in the group panel. Only explicit queen requests update it.
 if (queen_connected) { report_discovery(); request_queen_info(); }
-if (group_order_version == 0) { move_to(nest_x, nest_y); }
-else if (abs(x - objective_x) + abs(y - objective_y) < 1000) { move_to(explore_x, explore_y); }
-else { move_to(objective_x, objective_y); }
+if (group_order_version == 0) { set_target(nest_x, nest_y); }
+else if (abs(x - objective_x) + abs(y - objective_y) < 1000) { set_target(explore_x, explore_y); }
+else { set_target(objective_x, objective_y); }
