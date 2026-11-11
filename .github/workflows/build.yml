@@ -12,7 +12,7 @@ jobs:
       - run: dotnet build AntMind.sln --no-restore
       - run: dotnet run --project tools/AntMind.Checks --no-build
       - run: dotnet publish src/AntMind.Desktop -c Release -r win-x64 --self-contained true -o artifacts/desktop
-  # headless Linux 移植：只构建/验证不依赖 Avalonia 的三工程（WXT 选定「去掉桌面」）
+  # headless Linux 移植：只构建/验证不依赖 Avalonia 的四工程（WXT 选定「去掉桌面」）
   linux:
     runs-on: ubuntu-latest
     steps:
@@ -25,4 +25,5 @@ jobs:
       - run: dotnet build tools/AntMind.Checks/AntMind.Checks.csproj -c Debug --no-restore
       - run: dotnet build tools/AntMind.Evaluator/AntMind.Evaluator.csproj -c Debug --no-restore
       - run: dotnet build src/AntMind.Mcp/AntMind.Mcp.csproj -c Debug --no-restore
+      - run: dotnet build tools/AntMind.Console/AntMind.Console.csproj -c Debug --no-restore
       - run: dotnet run --project tools/AntMind.Checks -c Debug --no-build
