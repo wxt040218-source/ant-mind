@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
-# VERSION=0.2.0
+# VERSION=0.2.1
 # 变更摘要：
+#   0.2.1：严格校验基准文件；失败退出/无效结果不排名；仅组内排名；全矩阵共享一次快照；
+#          未验证种子记null；新增单元回归与真实MCP烟测。
 #   0.2.0 矩阵化升级（reviewer P0-1 / P1-3 共 11 项，逐条落地）：
 #     ① --species 扩到 5 蚁种 scout/hauler/soldier/chef/builder（新增 builder），支持多值与逗号分隔
 #     ② 每个 cell 显式记录维度：seed（宿主固定 42，多 seed 靠多 slot）、slot、species、ticks、
@@ -34,7 +36,7 @@
 同题对照怎么保证：
   宿主 Evaluator --serve 是 fresh paused 世界，种子写死 42
   （tools/AntMind.Evaluator/Program.cs:32），--serve 起时 Tick=0 且 Paused。
-  每个 cell 从这份 fresh 世界存一份自己的基准档（多 cell 各自 slot，避免互踩），
+  整个矩阵从暂停世界只存一次唯一命名的基准档，所有 cell 复用同一快照，
   之后 evaluate_save 从该档分支出 Baseline（Run(false)，空白对照）与 Candidate
   （装了该 DSL），两条内存分支互不污染。所有 slot 内容一致 = 同题。
   【种子不是评估参数】EvaluationRequest 没有 seed 字段；世界随机态由存档固定。
@@ -358,7 +360,9 @@ def make_baseline_slot(bridge, slot, allow_dirty=False):
     tick = ci(snap, "Tick")
     paused = ci(snap, "Paused")
     protocol_version = ci(resp, "ProtocolVersion")
-    if not allow_dirty and (tick != 0 or not paused):
+    if not paused:
+        raise BridgeError("宿主必须暂停；运行中逐 cell 存档不能保证同题，请先暂停宿主")
+    if not allow_dirty and tick != 0:
         raise BridgeError("宿主世界不是 fresh paused：Tick=%s, Paused=%s；请用 fresh 的 "
                           "Evaluator --serve 宿主，或加 --allow-dirty-host 放宽" % (tick, paused))
     if allow_dirty and (tick != 0 or not paused):
@@ -380,10 +384,13 @@ def evaluate_one(bridge, slot, ticks, species, source, force_validate=True):
             v = bridge.call("validate_program", dict(source=source))
             result["valid"] = bool(ci(v, "valid", False))
             if not result["valid"]:
-                result["validate"] = v  # ⑥ 不合法如实记入，不跳过
+                result["validate"] = v
+                result["error"] = "invalid_program"
+                return result  # Invalid DSL is data, not an IPC failure.
         except Exception as exc:
             result["valid"] = None
             result["validate"] = "校验调用失败：%s" % exc
+            result["infrastructureError"] = True
     else:
         result["valid"] = None
         result["validateSkipped"] = True
@@ -392,14 +399,17 @@ def evaluate_one(bridge, slot, ticks, species, source, force_validate=True):
     except BridgeError as exc:
         # ⑥ 单份 DSL 评估失败（如非法 DSL 触发 TryQueueApply 抛错）如实记入，绝不中断整个矩阵出表
         result["error"] = "evaluate_save 调用失败：%s" % exc
+        result["infrastructureError"] = True
         return result
     err = ci(resp, "Error")
     if err:
         result["error"] = err
+        result["infrastructureError"] = True
         return result
     ev = ci(resp, "Evaluation")
     if not ev:
         result["error"] = "返回缺少 Evaluation：%s" % json.dumps(resp, ensure_ascii=False)[:300]
+        result["infrastructureError"] = True
         return result
     cand = ci(ev, "Candidate") or {}
     base = ci(ev, "Baseline") or {}
@@ -419,6 +429,11 @@ def evaluate_one(bridge, slot, ticks, species, source, force_validate=True):
     result["emptyControlDevelopmentValueDelta"] = ci(base, "DevelopmentValueDelta")
     result["raw"] = ev
     return result
+
+
+def is_scored(cell):
+    return (isinstance(cell.get("score"), (int, float)) and
+            not cell.get("error") and not cell.get("infrastructureError") and cell.get("valid") is not False)
 
 
 def csv_val(value):
@@ -449,7 +464,7 @@ def main():
     ap.add_argument("--allow-invalid", action="store_true",
                     help="跳过 validate_program 前置校验，直接 evaluate_save（不合法 DSL 由 ProgramErrors 如实捕捉）")
     ap.add_argument("--allow-dirty-host", action="store_true",
-                    help="放宽 fresh 检查：允许宿主非 Tick=0/非 Paused 时继续建基准档")
+                    help="放宽 fresh 检查：允许宿主 Tick 非0；仍必须暂停并共享同一基准档")
     ap.add_argument("--no-selfcheck", action="store_true",
                     help="关闭确定性自检（默认逐 cell 复跑两次做全字段比对）")
     ap.add_argument("--out", default="",
@@ -484,7 +499,9 @@ def main():
     if baseline_path is not None and not baseline_path.is_absolute():
         baseline_path = ROOT / baseline_path
     candidates = []
-    if baseline_path is not None and baseline_path.exists():
+    if baseline_path is not None and not baseline_path.is_file():
+        ap.error("基准 DSL 文件不存在或不是文件：%s；如需关闭对照，请显式 --baseline none" % baseline_path)
+    if baseline_path is not None:
         candidates.append((BASELINE_LABEL, baseline_path))
     program_paths = []
     for raw in programs:
@@ -507,15 +524,16 @@ def main():
     cells = []
     determinism = {"enabled": not args.no_selfcheck, "total": 0, "passed": 0, "failed": 0, "cells": []}
     bridge = None
+    shared_slot = stem[:26] + "-" + uuid.uuid4().hex[:12]
     try:
         bridge = Bridge()
+        world = make_baseline_slot(bridge, shared_slot, allow_dirty=args.allow_dirty_host)
         for index, (sp, tk, label, p) in enumerate(cell_dims, 1):
-            slot = derive_slot(stem, index, sp, tk) if multi_slot else stem
+            slot = shared_slot
             if not valid_slot(slot):
                 raise BridgeError("派生 slot 不合法：%s" % slot)
             source = p.read_text(encoding="utf-8")
             t0 = time.perf_counter()
-            world = make_baseline_slot(bridge, slot, allow_dirty=args.allow_dirty_host)
             if world_global is None:
                 world_global = world
                 protocol_global = world.get("protocolVersion")
@@ -544,8 +562,8 @@ def main():
             cells.append({
                 "cellId": "c%03d" % index,
                 # ② 维度显式摊平在 cell 顶层
-                "seed": HOST_SEED,
-                "seedNote": "宿主固定 42（Evaluator/Program.cs:32）；多 seed 需换宿主种子 + 每 seed 各建基准档(多 slot)",
+                "seed": None,
+                "seedNote": "未从宿主验证种子；默认 Evaluator 新局为42，不能据此断言已加载存档的种子",
                 "slot": slot,
                 "species": sp,
                 "ticks": tk,
@@ -576,24 +594,25 @@ def main():
     # 回填「相对 baselineFile 参照行的 Δ」：按 (species,ticks) 分组取参照行得分
     ref_score = {}
     for c in cells:
-        if c["isBaselineFileCandidate"] and c.get("score") is not None:
+        if c["isBaselineFileCandidate"] and is_scored(c):
             ref_score[(c["species"], c["ticks"])] = c["score"]
     for c in cells:
         ref = ref_score.get((c["species"], c["ticks"]))
         c["baselineFileScore"] = ref
         c["deltaVsBaselineFile"] = (c["score"] - ref) if (ref is not None and c.get("score") is not None) else None
 
-    # 排名：主评分 Candidate.NewFoodPoints 降序（None 垫底）；GrossDelivered 不参与
-    ranked = sorted(cells, key=lambda c: (c.get("score") is not None, c.get("score") or 0), reverse=True)
-    for i, c in enumerate(ranked, 1):
-        c["rank"] = i
-    group_rank = {}
+    # Only comparable, successfully scored cells receive a rank. Cross-group total ranks
+    # are deliberately absent: species and horizon change the question being measured.
     ordered = sorted(cells, key=lambda c: (c["species"], c["ticks"],
-                                           -(c.get("score") or 0), c["label"]))
+                                           not is_scored(c), -(c.get("score") or 0), c["label"]))
+    group_rank = {}
     for c in ordered:
         key = (c["species"], c["ticks"])
-        group_rank[key] = group_rank.get(key, 0) + 1
-        c["rankInGroup"] = group_rank[key]
+        c["rank"] = None
+        c["rankInGroup"] = None
+        if is_scored(c):
+            group_rank[key] = group_rank.get(key, 0) + 1
+            c["rankInGroup"] = group_rank[key]
 
     # schema15 重标定：按 (species,ticks) 列出 baselineFile 参照行实测得分，明确旧 8/0 作废
     calibration = []
@@ -621,9 +640,9 @@ def main():
         control=dict(
             programs=[str(p) for p in program_paths], ticks=ticks_values, species=species_values,
             cellCount=cell_count, baselineFile=str(baseline_path) if baseline_path is not None else None,
-            slotStem=stem, slotMode=("每 cell 派生独立 slot" if multi_slot else "单 slot"),
-            pipe=os.environ.get("ANTMIND_PIPE", "antmind-v1"), hostSeed=HOST_SEED,
-            seedNote="宿主固定 42；EvaluationRequest 无 seed 字段，多 seed 靠换宿主种子 + 多 slot",
+            slotStem=stem, slotMode=("所有 cell 复用同一基准快照"),
+            pipe=os.environ.get("ANTMIND_PIPE", "antmind-v1"), hostSeed=None,
+            seedNote="宿主接口未暴露种子，记录为null；所有cell共享一次保存的快照",
             protocolVersion=protocol_global, gitHead=git_head_value, world=world_global,
             primaryScore="Candidate.NewFoodPoints（FirstAdmissionPoints 增量）",
             notPrimaryScore="GrossDelivered 仅展示，不参与排名",
@@ -631,7 +650,7 @@ def main():
                 "emptyControlBranch": "evaluate_save 内部 Run(false)：不装候选 DSL、从同一存档跑的空白对照分支 → emptyControlScore / deltaVsEmptyControl",
                 "baselineFileCandidate": "作为候选行塞进排名的官方默认 DSL → baselineFile / isBaselineFileCandidate / baselineFileScore / deltaVsBaselineFile",
             },
-            validateMode=("--allow-invalid 跳过前置校验" if args.allow_invalid else "validate_program 强制前置，如实记录且不跳过"),
+            validateMode=("--allow-invalid 跳过前置校验" if args.allow_invalid else "validate_program 强制前置，非法 DSL 记录错误且不提交评估"),
             freshMode=("--allow-dirty-host 放宽" if args.allow_dirty_host else "要求 fresh（Tick==0 且 Paused）"),
             selfcheckMode=("已关闭" if args.no_selfcheck else "逐 cell 全字段比对（复跑两次）"),
         ),
@@ -697,6 +716,8 @@ def main():
     if scored and all(s == 0 for s in scored):
         print("提示：所有 cell 均为 0 分——fresh 世界 tick=0，tick 太少可能还没完成首次入巢计分，评测无区分度")
     print("结果：%s\n      %s" % (json_path, csv_path))
+    if any(c.get("infrastructureError") for c in cells) or not any(is_scored(c) for c in cells):
+        return 2
     return 0 if (not determinism["enabled"] or determinism["failed"] == 0) else 4
 
 

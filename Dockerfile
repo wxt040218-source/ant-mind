@@ -11,9 +11,9 @@
 FROM mcr.microsoft.com/dotnet/sdk:10.0.403 AS build
 WORKDIR /src
 COPY . .
-# RuntimeIdentifiers 已含 linux-x64；这里刻意不带 --locked-mode，让 restore 补齐 linux-x64 依赖段。
+# RuntimeIdentifiers 与 lock 已含 linux-x64，锁定还原避免依赖漂移。
 # 提交进仓库的 10 份 packages.lock.json 由 SDK 10 的 --force-evaluate 预先重生成（见移植报告）。
-RUN dotnet restore AntMind.sln
+RUN dotnet restore AntMind.sln --locked-mode
 # 只构建 headless 四工程及其依赖链，绕开 Avalonia 桌面工程在 Linux 下的 GUI 依赖。
 # 统一 -c Debug：两 py 脚本与 McpCheck.cs 都硬编码 bin/Debug/net10.0/*.dll。
 RUN dotnet build tools/AntMind.Checks/AntMind.Checks.csproj -c Debug --no-restore && \

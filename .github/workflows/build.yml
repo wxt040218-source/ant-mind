@@ -5,6 +5,10 @@ jobs:
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: python -m unittest discover -s scripts/tests -v
       - uses: actions/setup-dotnet@v4
         with:
           dotnet-version: '10.0.403'
@@ -17,13 +21,24 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: python -m unittest discover -s scripts/tests -v
       - uses: actions/setup-dotnet@v4
         with:
           dotnet-version: '10.0.403'
-      # 锁文件对 RID 敏感：Linux job 不用 --locked-mode，整仓 restore 会补齐 linux-x64 段
-      - run: dotnet restore AntMind.sln
+      # Linux RID lock sections are committed; enforce reproducible restores.
+      - run: dotnet restore AntMind.sln --locked-mode
       - run: dotnet build tools/AntMind.Checks/AntMind.Checks.csproj -c Debug --no-restore
       - run: dotnet build tools/AntMind.Evaluator/AntMind.Evaluator.csproj -c Debug --no-restore
       - run: dotnet build src/AntMind.Mcp/AntMind.Mcp.csproj -c Debug --no-restore
       - run: dotnet build tools/AntMind.Console/AntMind.Console.csproj -c Debug --no-restore
       - run: dotnet run --project tools/AntMind.Checks -c Debug --no-build
+      - run: python scripts/check-model-eval.py
+      - name: Build headless container
+        run: docker build -t antmind-headless-ci .
+      - name: Container architecture and real evaluation smoke
+        run: |
+          docker run --rm --entrypoint dotnet antmind-headless-ci tools/AntMind.Checks/bin/Debug/net10.0/AntMind.Checks.dll
+          docker run --rm --entrypoint python3 antmind-headless-ci scripts/check-model-eval.py
