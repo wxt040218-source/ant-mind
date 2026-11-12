@@ -1,0 +1,18 @@
+# Ant Mind headless Linux 构建上下文裁剪（配合 Dockerfile 的 COPY . .）
+# 排除版本库与所有构建产物，保留源码 / 工程文件 / content / 配置；build 阶段会重新生成 bin/obj。
+.git
+.gitignore
+**/bin/
+**/obj/
+.tools/
+artifacts/
+saves/
+**/saves/
+__pycache__/
+*.pyc
+.env
+.codex-live/
+*.user
+*.suo
+# 本机验证用的 MSBuild/NuGet/dotnet 临时缓存（数百 MB），不进 build context
+.tmp-*/

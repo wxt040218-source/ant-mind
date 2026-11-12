@@ -20,22 +20,32 @@ public static class Frames {
 }
 public sealed class PipeServer(string name, Func<WireRequest, CancellationToken, Task<WireResponse>> dispatch) {
     // One request per connection; clients reconnect after each response. A finite timeout prevents stalled peers.
+    // Linux implements named pipes as Unix Domain Sockets. Disposing the listening socket after every request
+    // (the old per-iteration "using") unlinks/rebinds the socket path, which resets connections still queued
+    // in the accept backlog with ECONNRESET when MCP and checks connect concurrently. Windows queues pipes in
+    // the kernel and hides this race. Keep one server stream alive and reuse its listening socket via
+    // Disconnect(); only rebuild the instance when a connection can no longer be reset.
     public async Task RunAsync(CancellationToken ct) {
         while (!ct.IsCancellationRequested) {
             using var pipe = new NamedPipeServerStream(name, PipeDirection.InOut, 1, PipeTransmissionMode.Byte,
                 PipeOptions.Asynchronous | PipeOptions.CurrentUserOnly);
-            try {
-                await pipe.WaitForConnectionAsync(ct);
-                using var deadline = CancellationTokenSource.CreateLinkedTokenSource(ct);
-                deadline.CancelAfter(TimeSpan.FromSeconds(5));
-                var request = await Frames.ReadAsync<WireRequest>(pipe, deadline.Token);
-                var response = request.ProtocolVersion != Protocol.Version
-                    ? new WireResponse(Protocol.Version, Error: "protocol_version")
-                    : await dispatch(request, deadline.Token);
-                await Frames.WriteAsync(pipe, response, deadline.Token);
-            } catch (OperationCanceledException) when (ct.IsCancellationRequested) { break; }
-            catch (Exception ex) when (ex is IOException or JsonException or OperationCanceledException) {
-                Console.Error.WriteLine("IPC request rejected: " + ex.Message);
+            while (!ct.IsCancellationRequested) {
+                try {
+                    await pipe.WaitForConnectionAsync(ct);
+                    using var deadline = CancellationTokenSource.CreateLinkedTokenSource(ct);
+                    deadline.CancelAfter(TimeSpan.FromSeconds(5));
+                    var request = await Frames.ReadAsync<WireRequest>(pipe, deadline.Token);
+                    var response = request.ProtocolVersion != Protocol.Version
+                        ? new WireResponse(Protocol.Version, Error: "protocol_version")
+                        : await dispatch(request, deadline.Token);
+                    await Frames.WriteAsync(pipe, response, deadline.Token);
+                    // Reuse the same listening socket for the next request (no unlink/rebind).
+                    pipe.Disconnect();
+                } catch (OperationCanceledException) when (ct.IsCancellationRequested) { return; }
+                catch (Exception ex) when (ex is IOException or JsonException or OperationCanceledException or InvalidOperationException) {
+                    Console.Error.WriteLine("IPC request rejected: " + ex.Message);
+                    break; // unrecoverable connection: rebuild the instance so one bad peer cannot stall the host
+                }
             }
         }
     }
