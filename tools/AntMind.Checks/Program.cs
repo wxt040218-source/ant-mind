@@ -499,7 +499,7 @@ MapPresentationCheck.Run(Check);
 MilestoneCheck.Run(Check);
 BehaviorProgramCheck.Run(Check);
 await InstitutionCheck.Run(Check);
-await McpCheck.RunAsync();
+await McpCheck.RunAsync(Check);
 Console.WriteLine($"All {checks} architectural checks passed.");
 sealed class ExampleRule : IWorldRule {
     public string Id => "example.carry"; public int Order => 100;

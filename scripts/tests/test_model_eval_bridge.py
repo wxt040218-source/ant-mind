@@ -23,7 +23,7 @@ class BridgeTests(unittest.TestCase):
             args = ['bridge', '--programs', str(program), '--baseline', 'none', '--out', str(out), *extra]
             with patch.object(sys, 'argv', args), patch.object(b, 'Bridge'), \
                  patch.object(b, 'git_head', return_value='fixture'), \
-                 patch.object(b, 'make_baseline_slot', return_value={'protocolVersion': 18}) as save, \
+                 patch.object(b, 'make_baseline_slot', return_value={'protocolVersion': 19}) as save, \
                  patch.object(b, 'evaluate_one', side_effect=results), \
                  contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(io.StringIO()):
                 code = b.main()

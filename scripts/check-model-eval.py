@@ -1,3 +1,6 @@
+# VERSION=0.1.0
+# 变更摘要：
+#   0.1.0（2026-11-14）纳入语义化版本；真桥启动前等待 Evaluator --serve 就绪，消除 observe 抢跑竞态。
 """Real Linux/Windows headless regression: isolated host, official MCP, valid/invalid DSL."""
 import json
 import os
@@ -5,6 +8,7 @@ from pathlib import Path
 import subprocess
 import sys
 import tempfile
+import time
 import uuid
 
 root = Path(__file__).resolve().parents[1]
@@ -16,6 +20,17 @@ with tempfile.TemporaryDirectory() as tmp:
     with (folder / 'host.log').open('w') as log:
         host = subprocess.Popen(['dotnet', str(root / 'tools/AntMind.Evaluator/bin/Debug/net10.0/AntMind.Evaluator.dll'), '--serve'], cwd=root, env=env, stdout=log, stderr=log)
         try:
+            host_path = folder / 'host.log'
+            deadline = time.monotonic() + 10
+            while time.monotonic() < deadline:
+                if host.poll() is not None:
+                    raise RuntimeError('Evaluator host exited before readiness: exit %s' % host.poll())
+                if 'AntMind headless host' in host_path.read_text(encoding='utf-8', errors='replace'):
+                    break
+                time.sleep(0.05)
+            else:
+                raise RuntimeError('Evaluator host did not become ready within 10 seconds')
+            time.sleep(0.2)  # PipeServer binds just after the readiness line; avoid a startup race.
             run = subprocess.run([sys.executable, str(root / 'scripts/model-eval-bridge.py'), '--programs', str(root / 'content/programs/hauler-reliable.ant'), str(invalid), '--baseline', 'none', '--matrix', '--ticks', '600', '1200', '--out', str(folder / 'result')], cwd=root, env=env, timeout=180)
             if run.returncode:
                 raise RuntimeError('Real bridge failed: exit %s' % run.returncode)

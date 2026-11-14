@@ -1,4 +1,5 @@
-// VERSION=0.1.0
+// VERSION=0.1.1
+// 0.1.1: S1.5 封住 S2 巢穴命令空转，加入默认制度档位 1200 Tick 基线对账。
 using System.Collections.Immutable;
 using System.Reflection;
 using System.Text.Json;
@@ -93,6 +94,22 @@ internal static class InstitutionCheck {
 
         async Task<CommandResult> Send(Func<Snapshot, GameCommand> build) =>
             await session.ExecuteAsync(build(await session.ObserveAsync()));
+
+        var chamberBefore = await session.ObserveAsync();
+        var chamberKinds = new[] { CommandKind.PlanChamber, CommandKind.DigChamber, CommandKind.UpgradeChamber, CommandKind.CancelChamber };
+        var chamberResults = new List<CommandResult>();
+        foreach (var kind in chamberKinds)
+            chamberResults.Add(await Send(v => new GameCommand(Guid.NewGuid(), v.Revision, kind, Reason: "s2 not implemented") {
+                ChamberX = 1, ChamberY = 2, ChamberType = "storage", ExpectedWorldId = v.WorldId
+            }));
+        var chamberAfter = await session.ObserveAsync();
+        check(chamberResults.All(r => !r.Accepted && r.Code == "not_implemented") &&
+              chamberAfter.Revision == chamberBefore.Revision && chamberAfter.Tick == chamberBefore.Tick &&
+              chamberAfter.FirstAdmissionPoints == chamberBefore.FirstAdmissionPoints &&
+              chamberAfter.Delivered == chamberBefore.Delivered && chamberAfter.Inventory == chamberBefore.Inventory &&
+              chamberAfter.DevelopmentValue == chamberBefore.DevelopmentValue && chamberAfter.Generated == chamberBefore.Generated &&
+              chamberAfter.Stock.Count == chamberBefore.Stock.Count,
+            "institution/chamber-commands-rejected-until-s2");
 
         var rejectedField = await Send(v => new GameCommand(Guid.NewGuid(), v.Revision, CommandKind.SetInstitution, Reason: "bad field") { InstitutionField = "bogus", InstitutionTier = "strict" });
         var rejectedTier = await Send(v => new GameCommand(Guid.NewGuid(), v.Revision, CommandKind.SetInstitution, Reason: "bad tier") { InstitutionField = "reserve_policy", InstitutionTier = "bogus" });
@@ -194,6 +211,30 @@ internal static class InstitutionCheck {
               d1.Institution.Version == d2.Institution.Version && d1.Nest.Cells.Length == d2.Nest.Cells.Length,
             "contract/determinism/institution-tick-replay");
 
+        // 同 seed、同输入，唯一自变量是每 Tick 是否注入全默认制度参数快照：
+        // A=null（S1 前基线），B=Resolve(world)（全默认档位）。1200 Tick 逐帧比对业务摘要字节。
+        var abConfig = config with { InitialResourceNodes = 0 };
+        var abCatalog = new SpeciesProgramCatalog(abConfig.AntTypes.Select(x => x.Id));
+        var abSimulation = GameRules.Create(abCatalog);
+        var a = Simulation.Create(abConfig, 5150);
+        var b = Simulation.Create(abConfig, 5150);
+        var equivalent = true;
+        for (var i = 0; i < 1200; i++) {
+            a = GameRules.Activate(a, abCatalog);
+            b = GameRules.Activate(b, abCatalog);
+            a = a with { ActiveParameters = null };
+            b = b with { ActiveParameters = InstitutionMechanics.Resolve(b) };
+            a = abSimulation.Step(a);
+            b = abSimulation.Step(b);
+            if (!JsonSerializer.SerializeToUtf8Bytes(BusinessTrace(a))
+                    .SequenceEqual(JsonSerializer.SerializeToUtf8Bytes(BusinessTrace(b))))
+                equivalent = false;
+        }
+        check(equivalent && a.Tick == 1200 && b.Tick == 1200 &&
+              a.ActiveParameters is null && b.ActiveParameters is not null &&
+              InstitutionMechanics.IsDefaultInstitution(a) && InstitutionMechanics.IsDefaultInstitution(b),
+            "contract/determinism/default-institution-baseline-equivalence");
+
         // ── save5/wire18 → save6/wire19 迁移六步 + 原档字节不变 ───────────
         var catalog2 = new SpeciesProgramCatalog(config.AntTypes.Select(x => x.Id));
         var legacyWorld = Simulation.Create(config with { InitialResourceNodes = 0 }, 909);
@@ -251,6 +292,23 @@ internal static class InstitutionCheck {
               migrated.World.RandomState == legacyWorld.RandomState,
             "contract/no-farming/rollback-does-not-mint");
     }
+
+    private static object BusinessTrace(WorldState w) => new {
+        w.Tick, w.RandomState, w.FirstAdmissionPoints, w.Delivered, w.Generated,
+        w.StoredFoodValue, w.DevelopmentChange, w.DevelopmentValue, w.ProcessingValueAdded,
+        w.FoodEaten, w.HealthRestored, CreatedItems = SortedLongs(w.CreatedItems), ConsumedItems = SortedLongs(w.ConsumedItems),
+        Amounts = SortedLongs(w.Stock.Amounts), Credits = SortedCredits(w.Stock.Credits),
+        Ants = w.Ants.Select(a => new { a.Id, x = a.Position.X, y = a.Position.Y, a.Health, a.Carry }).ToArray(),
+        EconomyEvents = w.EconomyEvents.Select(e => new { e.Tick, e.Metric, e.Item, e.Quantity, e.AntId, e.Species, e.GroupId }).ToArray()
+    };
+
+    private static KeyValuePair<string, long>[] SortedLongs(ImmutableDictionary<string, long> source) =>
+        source.OrderBy(x => x.Key, StringComparer.Ordinal).ToArray();
+
+    private static object[] SortedCredits(ImmutableDictionary<string, ImmutableArray<CreditLot>> source) =>
+        source.OrderBy(x => x.Key, StringComparer.Ordinal)
+            .Select(x => new object[] { x.Key, x.Value.Select(lot => new { lot.Quantity, lot.PointsPerUnit }).ToArray() })
+            .ToArray();
 
     private static string Pascal(string field) => field switch {
         "reserve_policy" => "ReservePolicy", "ration_policy" => "RationPolicy", "labor_policy" => "LaborPolicy",

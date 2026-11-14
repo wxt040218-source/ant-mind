@@ -1,15 +1,23 @@
 # 蚁智内政三件套 · 文明制度（Institution）分册契约
 
-> 版本 v0.1.0 ｜ 契约冻结 ｜ 2026-11-13
+> 版本 v0.1.1 ｜ 契约冻结 ｜ 2026-11-13 ｜ v0.1.1 勘误 2026-11-14
 
 > 本文件只冻结契约、不含实现；实现按 S1/S2/S3 落地。
+
+## v0.1.1 勘误（2026-11-14）
+
+- 本次勘误只订正 `set_institution` 的语义与锚点题 `institution-reserve-crunch` 的区分变量；四条不变式、Order 表、版本三跳、字段/档位白名单、SaveMigration 六步全部不变。文件名与 `contractVersion="0.1.0"` 保持 S0 冻结标识不变。
+- `set_institution` 是**编译期合法的只读意图语句**：DSL 编译通过后把字段/档位写入 `Decision` 供审计/预演，不写 `WorldState.InstitutionState`、不产生全局写入、不改变制度版本。制度写入唯一入口是 `CommandKind.SetInstitution` / `RollbackInstitution` 经 MCP `command` → Runtime actor → `requestId` 幂等落盘。
+- 锚点题三档的区分变量改由上述 MCP command 的下发次数、阶段组合与 `RollbackInstitution` 重放构成；DSL `set_institution` 只可作为题面里的意图记录，不作为制度生效与否的判据。
+- 登记实现偏差（本轮只登记不改）：`admission_policy` 冻结口径（§2.2）要求 `fresh_first` 按 `CreditLot.CreatedTick`、`bulk_first` 按 `Quantity`、`near_first` 按距巢、`type_first` 按 `Value` 排序且次键恒为 `ResourceId` 升序；但本库 `CreditLot` 仅有 `(Quantity, PointsPerUnit)`（`src/AntMind.Contracts/Production.cs:6`），无 `CreatedTick` / `ResourceId`，当前实现改以 `AntId` 作稳定次键。受数据结构限制，仅排序键不同，物品总量与账本守恒、`FirstAdmissionPoints` 判定不受影响；留 S4 标定前订正实现或契约，S1.5 不修实现、不改 §2.2 正文。
+- 登记 S1.5 新增 Check label：`institution/chamber-commands-rejected-until-s2`、`institution/chamber-commands-filtered-from-get-actions`、`contract/determinism/default-institution-baseline-equivalence`。
 
 本分册从属于 [`colony-era-contract-0.1.0.md`](colony-era-contract-0.1.0.md)（下称「总纲」）。总纲 §2 四条不变式、§3 Order 表、§5 版本表、§7 scenario pack 字段表、§8 验收口径对本分册全部生效，本分册不重定义、不冲突。落地阶段 **S1**。
 
 ## 1 · 定位与硬边界
 
 - `InstitutionState` 是**全群共享、带版本、可热更新/回滚的封闭白名单状态**。它是一张「国策表」，不是随机源、不是奖励表、不是第二条计分通道。
-- **制度不直接给分**：任何 `set_institution` / `RollbackInstitution` 都不得调用 `Economy.Created`、不得写 `Generated`、不得触碰 `FirstAdmissionPoints` 与 `DevelopmentValue`。收益仍只认 `core.interaction`(Order 30) 的首次入巢（总纲 §2.3）。
+- **制度不直接给分**：任何只读 `set_institution` 意图记录、`CommandKind.SetInstitution` / `RollbackInstitution` 命令都不得调用 `Economy.Created`、不得写 `Generated`、不得触碰 `FirstAdmissionPoints` 与 `DevelopmentValue`。收益仍只认 `core.interaction`(Order 30) 的首次入巢（总纲 §2.3）。
 - **制度是状态不是随机**：`GameSession.Advance` 在跑本 Tick 的 rules 之前调用纯函数 `InstitutionParameters.Resolve(InstitutionState)`，把白名单档位映射成整数阈值/乘数/稳定排序键，得到本 Tick 只读快照；各消费规则在自身 `Apply` 开头读取快照。快照 `[JsonIgnore]`、不落盘、不写回任何持久状态、不读 `world.RandomState`、不读 `CreatureSeed`/`NestSeed`。
 - **制度不新增 IWorldRule、不占 Order**：总纲 §3 已把未占用 Order `1` 留给 `core.creature-ecology`、`33` 留给 `core.nest-construction`；制度没有规则 Id、没有 Order、不参与 `OrderBy(x => x.Order).ThenBy(x => x.Id, StringComparer.Ordinal)` 排序。`InstitutionState` 本身是 `WorldState.Institution` 上的**持久存档字段**（总纲 §5，随 save5→6 迁移补默认值），但每 Tick 派生的 `InstitutionParameters` 只是只读执行上下文，二者不得混名。
 - **沿用项目既定事实**：每蚁种全群共享代码、小组仅为任务数据（`docs/AGENT_START_HERE.md` / `PROJECT_STATUS.md`），故 `labor_policy` 只改参数（工种权重），**不改 `SpeciesProgramCatalog`、不替换程序、不给某小组单独发一份制度**。`ConfigureGroup` 原子替换语义（`Mcp/Program.cs:47`）保持不变。
@@ -93,12 +101,12 @@
 
 | 名称 | 形态 | 参数 | 白名单位置 | 精确报错文本 |
 |---|---|---|---|---|
-| `set_institution` | DSL 动作（语句） | 2：`field`(string 字面量，§2.1 五字段之一)、`tier`(string 字面量，该字段 §2.2 枚举之一) | `Actions`(:511) **追加**；参数个数写进 `DslCall` 表(:648) 的 2 参分支 | 参数个数不符 `Action 'set_institution' expects 2 argument(s).`；字段非法 `Invalid institution field '{name}'.`；档位非法 `Invalid institution tier '{tier}' for '{field}'.` |
+| `set_institution` | DSL 只读意图语句（编译期合法，写 `Decision`，不改 `InstitutionState`、不产生全局写入） | 2：`field`(string 字面量，§2.1 五字段之一)、`tier`(string 字面量，该字段 §2.2 枚举之一) | `Actions`(:511) **追加**；参数个数写进 `DslCall` 表(:648) 的 2 参分支 | 参数个数不符 `Action 'set_institution' expects 2 argument(s).`；字段非法 `Invalid institution field '{name}'.`；档位非法 `Invalid institution tier '{tier}' for '{field}'.` |
 | `institution` | 表达式函数（只读量） | 1：`field` | `ExpressionFunctions`(:510) **追加**；参数个数写进 `DslGroupValue`/`DslCall` 表(:648) 的 1 参分支 | 参数个数不符复用 `:649` 现模板 `Function 'institution' expects 1 argument(s).`；字段非法 `Invalid institution field '{name}'.`；未知名走 `:644` `Unknown expression function '{identifier.Text}'.` |
 | `institution_version` | Builtin（只读量，无参） | 0 | `Builtins`(:499) **追加** | 未知名走 `:653` `Unknown variable '{identifier.Text}'.` |
 
 - 返回类型：`institution(field)` 返回档位名字符串（DSL 内以枚举常量比较，不返回自由文本）；`institution_version` 返回 `int`。
-- 动作合法性仍走 `:558` `Unknown action '{identifier.Text}'.` 的同一套查表机制；白名单是**封闭**的，未登记的字段/档位一律在编译期拒绝，不进运行时。
+- 动作合法性仍走 `:558` `Unknown action '{identifier.Text}'.` 的同一套查表机制；白名单是**封闭**的，未登记的字段/档位一律在编译期拒绝，不进运行时。**编译通过不表示制度生效**：`set_institution` 只写 `Decision` 只读意图，不改 `InstitutionState`、不产生全局写入；全局制度写入唯一入口是 `CommandKind.SetInstitution` / `RollbackInstitution` 经 MCP `command` + Runtime actor + `requestId` 幂等，DSL 语句与命令层不得混名。
 - `GroupValue`(:181-195) 不新增成员；制度不是小组数据。
 - 五处同步见总纲 §4：DSL 改完必须同步 `content/world.json` 的 `institutions` 默认段、`Protocol.cs` `CommandKind`、`Mcp/Program.cs`、Checks。
 
@@ -165,9 +173,9 @@ institution/migration/original-bytes-untouched
 
 | 档 | `strategyId` | 参考策略（写进题面的可判行为） | 预期 |
 |---|---|---|---|
-| 烂 | `poor` | 全程不读 `institution(...)`、不调 `set_institution`；或每 Tick 乱切档位导致 `expectedRevision` 冲突与重复回滚 | 低储期断粮/无效回滚，L3 写对率与得分垫底 |
-| 中 | `medium` | 只在 `stock` 低于单一阈值时把 `reserve_policy` 切到 `loose` 一次，其余字段不动 | 能避开断粮，但不会按威胁调 `defense_policy`，中段 |
-| 优 | `good` | 读 `institution(reserve_policy)` / `institution_version` 与事件流，分阶段组合 `reserve_policy` + `defense_policy` + `ration_policy`，并在版本冲突时用同一 `requestId` 重放、必要时 `RollbackInstitution` 到已知好版本 | 三档中 L3 写对率与 `FirstAdmissionPoints` 最高 |
+| 烂 | `poor` | 全程不读 `institution(...)`、不下发 `CommandKind.SetInstitution`；或每 Tick 乱下发制度命令导致 `expectedRevision` 冲突与重复 `RollbackInstitution` | 低储期断粮/无效回滚，L3 写对率与得分垫底 |
+| 中 | `medium` | 只在 `stock` 低于单一阈值时经 MCP `command` 下发一次 `CommandKind.SetInstitution` 把 `reserve_policy` 切到 `loose`，其余字段不动 | 能避开断粮，但不会按威胁组合制度命令，中段 |
+| 优 | `good` | 读 `institution(reserve_policy)` / `institution_version` 与事件流，分阶段组合下发 `CommandKind.SetInstitution`（`reserve_policy` + `defense_policy` + `ration_policy`），版本冲突时用同一 `requestId` 重放、必要时 `RollbackInstitution` 到已知好版本 | 三档中 L3 写对率与 `FirstAdmissionPoints` 最高 |
 
 **怎么判一道题能不能用（作废判据，逐字沿用总纲 §8.5）**：三档在同一 `scenarioId` 上的 L3 写对率差值低于该题预设最小可分阈值，或三档 `FirstAdmissionPoints` 全部相同（含同为 0）→ **该题直接作废**，不得靠调分母、改计分口径或换题目难度来「救」。L5 开放题单列，不并入 L3；能力结论须 `grading.crossPipelineRecheck=true` 跨管道独立复核后才可写入文档，并留存原始输入与完整方法（总纲 §7）。
 

@@ -1,8 +1,15 @@
 # 蚁智内政三件套 · 总纲契约
 
-> 版本 v0.1.0 ｜ 契约冻结 ｜ 2026-11-13
+> 版本 v0.1.1 ｜ 契约冻结 ｜ 2026-11-13 ｜ v0.1.1 勘误 2026-11-14
 
 > 本文件只冻结契约、不含实现；实现按 S1/S2/S3 落地。
+
+## v0.1.1 勘误（2026-11-14）
+
+- 本次勘误只升总纲与制度分册两份文档的内部版本行；另两份分册仍保持 S0 冻结的 v0.1.0，§0「同版本」按 S0 冻结时点理解，`contractVersion="0.1.0"` 字符串不变。
+- 四条不变式、Order 表、版本三跳、白名单、SaveMigration 六步、phase 顺序全部不变；文件名不变。
+- 订正 `set_institution` 为编译期合法的只读意图：DSL 写 `Decision` 供审计/预演，不改 `InstitutionState`、不产生全局写入。制度写入只走 `CommandKind.SetInstitution` / `RollbackInstitution` 经 MCP `command` + Runtime actor + `requestId` 幂等。
+- 制度分册同步登记 `admission_policy` 次键偏差留 S4；S1.5 不修实现、不改制度分册 §2.2 正文。
 
 ## 0 · 本文件的效力与边界
 
@@ -19,7 +26,7 @@
 | 巢穴规划建设 | `NestLayout` | 地下整数网格，房间带等级、连通判定、施工进度；效果是可验乘数/容量，不搞隐藏随机 | 是，`core.nest-construction`（Order 33） | S2 |
 | 野怪生态 | `CreatureKind` 白名单 | 复用现成 `EnemyView` / `EnemySpawnRule` / `EnemyMovementRule` / `CombatRule` / `AddFood` 尸体链路，**不另起对象体系** | 是，`core.creature-ecology`（Order 1） | S3 |
 
-三件套都遵守：新增只读量与动作进 `AntDslParser` 三张白名单；新增命令进 `CommandKind` 与 `command` 工具；新增状态进 `WorldState` 并走 `SaveMigration`；新增断言并入 `tools/AntMind.Checks/Program.cs` 现有单一 `Check(bool,label)` 计数器。
+三件套都遵守：新增只读量与动作进 `AntDslParser` 三张白名单；新增命令进 `CommandKind` 与 `command` 工具；新增状态进 `WorldState` 并走 `SaveMigration`；新增断言并入 `tools/AntMind.Checks/Program.cs` 现有单一 `Check(bool,label)` 计数器。**DSL `set_institution` 是只读意图语句**（写 `Decision` 供审计/预演，不改 `InstitutionState`、不产生全局写入）；全局立法只走 `CommandKind.SetInstitution` / `RollbackInstitution` 经 MCP `command` + Runtime actor + `requestId` 幂等，DSL 语句与命令层不得混名。
 
 ## 2 · 四条不变式：怎么保证 + 怎么验
 
@@ -107,7 +114,7 @@ Format=5 / Protocol=18  →  Format=6 / Protocol=19
 | Phase | 内容 | 完成判据 |
 |---|---|---|
 | **S0** | 冻结本总纲 + 三份分册，一笔 `docs(contracts):` 提交并推送 `origin dev/colony-era` | 4 份文档齐、字段/Order/命名自查一致、`git status --porcelain` 干净 |
-| **S1** | 文明制度：`InstitutionState`、参数纯函数、6 个 `CommandKind` 中的 2 个、DSL `set_institution` / `institution(...)`、MCP 只读工具、save5→6 迁移骨架 | 制度热更新/回滚幂等可验；旧档加载通过；五处同步全过 |
+| **S1** | 文明制度：`InstitutionState`、参数纯函数、6 个 `CommandKind` 中的 2 个、DSL 只读量 `institution(...)` 与只读意图语句 `set_institution`、MCP 只读工具、save5→6 迁移骨架 | 制度热更新/回滚幂等可验；旧档加载通过；五处同步全过 |
 | **S2** | 巢穴：`NestLayout`、`core.nest-construction`(33)、4 个 DSL 动作与只读量、连通 BFS、成本/效果表、最重的旧档补默认空布局 | 不连通不给加成可验；造拆不刷分可验；连通算法同输入同输出 |
 | **S3** | 野怪：`CreatureKind` 白名单、`core.creature-ecology`(1)、独立 `CreatureSeed`、5 种行为、掉落守恒、局部感知 | 步数纯函数迁徙可预测；掉落只走 `AddFood` 一次；子种子不污染主 RNG |
 | **S4** | 锚点标定题 + scenario pack + 评测口径落地 | 三件套各一套「烂/中/优」同题可分辨；写对率 L3 主指标出数；能力结论跨管道独立复核 |

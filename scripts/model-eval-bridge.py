@@ -1,12 +1,14 @@
 #!/usr/bin/env python3
-# VERSION=0.2.1
+# VERSION=0.2.2
 # 变更摘要：
+#   0.2.2：S1.5 文案订正；协议/内容/schema 版本串统一升到 wire19/schema16/content16，
+#          observe 顶层 ProtocolVersion=19；不新增协议版本硬编码等于判断，桥行为不变。
 #   0.2.1：严格校验基准文件；失败退出/无效结果不排名；仅组内排名；全矩阵共享一次快照；
 #          未验证种子记null；新增单元回归与真实MCP烟测。
 #   0.2.0 矩阵化升级（reviewer P0-1 / P1-3 共 11 项，逐条落地）：
 #     ① --species 扩到 5 蚁种 scout/hauler/soldier/chef/builder（新增 builder），支持多值与逗号分隔
 #     ② 每个 cell 显式记录维度：seed（宿主固定 42，多 seed 靠多 slot）、slot、species、ticks、
-#        baselineFile、dslSha256、protocolVersion（observe 顶层 ProtocolVersion=18）、gitHead、runtimeMs
+#        baselineFile、dslSha256、protocolVersion（observe 顶层 ProtocolVersion=19）、gitHead、runtimeMs
 #     ③ 确定性自检改为「逐 cell 全字段比对」：同一 cell 复跑两次比对整个结果对象（含所有分数字段、
 #        ProgramErrors、InventoryDelta、raw），不再只比首份 DSL 的 1 个字段
 #     ④ 采集 v0.19 新增的 EvaluationBranch 字段 ProcessingValueAdded / DevelopmentValueDelta，
@@ -23,8 +25,8 @@
 #        主评分用 Candidate.NewFoodPoints（FirstAdmissionPoints 增量），不看 GrossDelivered；
 #        baseline 概念分清：evaluate_save 内部 Run(false) 空白对照分支 → emptyControlScore，
 #        塞进排名的官方默认 DSL 候选行 → baselineFile / baselineFileScore，两者命名不混
-#     附：v0.18 及以前 content14 下「官方默认 8 分 / 劣质 DSL 0 分」基线在 content15/schema15 下作废，
-#        本版不再写死该数值，改由运行产物的 baselineCalibration 段按 (species,ticks) 实测重标定
+#     附：v0.18 及以前 content14 下「官方默认 8 分 / 劣质 DSL 0 分」是 v0.13 单点历史值，
+#        本版不写死该数值，改由运行产物的 baselineCalibration 段按 (species,ticks) 重标定
 #   0.1.1 修 make_baseline_slot 的 Command 缺 value/reason 参数；默认 ticks 300→1200；加「全 0 分」提示
 #   0.1.0 首版：薄驱动，复用 game-agent.py 协议，评分全交官方 evaluate_save
 """Ant Mind 多模型 DSL 同题评测薄驱动（headless Linux 版配套，v0.2.0 矩阵化）。
@@ -51,7 +53,7 @@
 主评分 = Candidate.NewFoodPoints（FirstAdmissionPoints 增量，防倒运刷分），
 不看 GrossDelivered（后者只在表里展示、不参与排名）。
 
-前置：wire18 的 Evaluator.dll 与 Mcp.dll 必须是同批重建产物（否则 Pipes.cs 回
+前置：wire19 的 Evaluator.dll 与 Mcp.dll 必须是同批重建产物（否则 Pipes.cs 回
   "protocol_version"）；宿主与 client 同 EUID / 同 TMPDIR / 同 mount namespace，
   ANTMIND_PIPE 用独立值（如 antmind-v019-matrix），host/client 继承同一值。
 
@@ -105,7 +107,7 @@ SLOT_CHARS = set("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789
 BASELINE_LABEL = "官方默认(参照/baselineFile)"
 DEPRECATED_BASELINE = {"old": "官方默认 8 分 / 劣质 DSL 0 分",
                        "scope": "v0.18 及以前 content14",
-                       "status": "在 content15/schema15 下作废，本版按 (species,ticks) 实测重标定"}
+                       "status": "v0.13 单点历史值，本版按 (species,ticks) 重标定"}
 
 
 class BridgeError(RuntimeError):
@@ -210,7 +212,7 @@ class Bridge:
         local = ROOT / ".tools/dotnet" / dotnet_exe
         exe = str(local) if local.exists() else dotnet_exe
         if not MCP_DLL.exists():
-            raise BridgeError("找不到 MCP 程序集 %s，请先构建 wire18 Debug 产物" % MCP_DLL)
+            raise BridgeError("找不到 MCP 程序集 %s，请先构建 wire19 Debug 产物" % MCP_DLL)
         env = os.environ.copy()
         if local.exists():
             env["DOTNET_ROOT"] = str(local.parent)
@@ -348,13 +350,13 @@ class Bridge:
 def make_baseline_slot(bridge, slot, allow_dirty=False):
     """⑧ 从 fresh paused 世界存一份该 cell 专属基准档；默认非 fresh 直接报错退出。
 
-    observe 顶层同时带 ProtocolVersion（wire18=18），一并返回供 ② 记录维度。
+    observe 顶层同时带 ProtocolVersion（wire19=19），一并返回供 ② 记录维度。
     Command 的 value / reason 是无默认值的位置参数（Program.cs:105），必须显式给。
     """
     resp = bridge.call("observe", {})
     snap = ci(resp, "Snapshot")
     if not snap:
-        raise BridgeError("observe 未返回 Snapshot，宿主未就绪（检查 ANTMIND_PIPE 与 wire18 同批产物）")
+        raise BridgeError("observe 未返回 Snapshot，宿主未就绪（检查 ANTMIND_PIPE 与 wire19 同批产物）")
     revision = ci(snap, "Revision")
     world_id = ci(snap, "WorldId")
     tick = ci(snap, "Tick")
@@ -614,7 +616,7 @@ def main():
             group_rank[key] = group_rank.get(key, 0) + 1
             c["rankInGroup"] = group_rank[key]
 
-    # schema15 重标定：按 (species,ticks) 列出 baselineFile 参照行实测得分，明确旧 8/0 作废
+    # schema16 重标定：按 (species,ticks) 列出 baselineFile 参照行实测得分，旧「8/0」按 v0.13 单点历史值处理
     calibration = []
     for c in cells:
         if c["isBaselineFileCandidate"]:
@@ -708,7 +710,7 @@ def main():
                "" if not determinism["failed"] else "，失败 cell：%s" %
                [x["cellId"] for x in determinism["cells"] if x["passed"] is False]))
     if calibration:
-        print("schema15 官方默认基线重标定（旧「8/0」作废）：")
+        print("schema16 官方默认基线重标定（旧「8/0」按 v0.13 单点历史值处理）：")
         for x in calibration:
             print("  %s ticks=%d → NewFoodPoints=%s（空白对照 %s，GrossDelivered %s）" %
                   (x["species"], x["ticks"], x["newFoodPoints"], x["emptyControlScore"], x["grossDelivered"]))

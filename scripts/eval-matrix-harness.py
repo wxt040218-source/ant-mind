@@ -1,6 +1,8 @@
-# VERSION=0.1.1
+# VERSION=0.1.2
 # -*- coding: utf-8 -*-
-"""Ant Mind 同题对照矩阵 harness（纯标准库，不改 scripts/model-eval-bridge.py 0.2.0）。
+# 变更摘要：
+#   0.1.2（2026-11-14）S1.5 文案订正：wire18→wire19，桥版本引用 0.2.0→0.2.2；行为不变。
+"""Ant Mind 同题对照矩阵 harness（纯标准库，不改 scripts/model-eval-bridge.py 0.2.2）。
 
 用法：
     python scripts/eval-matrix-harness.py --help
@@ -15,7 +17,7 @@
         --out .tmp-eval-harness/AB-SAMPLE-001-run1/reconcile.json
 
 设计要点（对齐 AB-调研与设计.md §5.5 / §5.6 / §3.6）：
-    1. 不改 0.2.0 桥：本脚本只在外层用 request.json + dslSha256 关联补追溯维度
+    1. 不改 0.2.2 桥：本脚本只在外层用 request.json + dslSha256 关联补追溯维度
        batchId / templateVersion / strategyId / promptSha256 / contractVersion / modelId 等。
     2. 同题对照控变量：同一份封存 programs/ 原样复制、同一 slot/ticks/species 口径、
        fresh paused seed42（Evaluator/Program.cs:32 GameSession(..., 42)）。
@@ -50,7 +52,7 @@ import time
 from datetime import datetime, timezone
 from pathlib import Path
 
-VERSION = "0.1.1"
+VERSION = "0.1.2"
 HERE = Path(__file__).resolve().parent   # scripts/
 ROOT = HERE.parent                       # 内层工作树 ant-mind-linux/（本脚本在 scripts/ 下，只上一层）
 BRIDGE = HERE / "model-eval-bridge.py"
@@ -133,7 +135,7 @@ def _popen_kwargs(env):
 def start_host(pipe):
     """起一条独立 Evaluator --serve 宿主；返回 Popen。失败直接抛 RuntimeError。"""
     if not EVALUATOR_DLL.is_file():
-        raise RuntimeError("找不到 %s，请先构建 wire18 Debug 产物" % EVALUATOR_DLL)
+        raise RuntimeError("找不到 %s，请先构建 wire19 Debug 产物" % EVALUATOR_DLL)
     env = os.environ.copy()
     env["ANTMIND_PIPE"] = pipe
     dotnet = _dotnet_exe()
@@ -171,7 +173,7 @@ def stop_host(proc):
 
 
 def run_bridge(pipe, programs, baseline, ticks, species, slot_stem, out_prefix, attempts=3):
-    """调 0.2.0 桥跑一次矩阵；不改桥一个字节。"""
+    """调 0.2.2 桥跑一次矩阵；不改桥一个字节。"""
     cmd = [sys.executable, str(BRIDGE), "--matrix",
            "--programs"] + [str(p) for p in programs] + [
            "--baseline", str(baseline),
@@ -266,7 +268,7 @@ def _freeze_copy_programs(programs_dir, dest, frozen=True):
 def _traceability(request, programs_rows, run_meta):
     trace = {k: request.get(k) for k in TRACE_KEYS}
     trace["harnessVersion"] = VERSION
-    trace["bridgeVersion"] = "0.2.0（未改动）"
+    trace["bridgeVersion"] = "0.2.2（未改动）"
     trace["reviewRunId"] = run_meta.get("reviewRunId")
     trace["reviewOf"] = run_meta.get("reviewOf")
     trace["pipes"] = run_meta.get("pipes")
@@ -419,7 +421,7 @@ def cmd_run(args):
         "hostSeed": HOST_SEED,
         "freshPaused": True,
         "bridgeUnmodified": True,
-        "bridgeVersion": "0.2.0",
+        "bridgeVersion": "0.2.2",
     }
     summary = {
         "version": VERSION,
@@ -440,8 +442,8 @@ def cmd_run(args):
         "# 运行条件\n\n- runId: `%s`\n- batchId: `%s`\n- strategyId: `%s` / templateVersion: `%s`\n"
         "- promptSha256: `%s`\n- contractVersion: `%s`\n- pipes: `%s`\n"
         "- ticks: `%s`（标准档 %s）\n- species: `%s`（全 5 物种 %s）\n"
-        "- 宿主：fresh paused，seed=42，wire18 host `Evaluator.dll --serve`\n"
-        "- 同一份封存 programs/：`%s`\n- 桥：`model-eval-bridge.py` 0.2.0，**未改动**\n"
+        "- 宿主：fresh paused，seed=42，wire19 host `Evaluator.dll --serve`\n"
+        "- 同一份封存 programs/：`%s`\n- 桥：`model-eval-bridge.py` 0.2.2，**未改动**\n"
         "- 结论口径：%s\n" %
         (args.run_id, request["batchId"], request["strategyId"], request["templateVersion"],
          request["promptSha256"], request["contractVersion"], json.dumps(pipes, ensure_ascii=False),

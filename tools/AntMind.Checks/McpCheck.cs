@@ -4,7 +4,7 @@ using System.Text.Json;
 using AntMind.Contracts;
 using AntMind.Transport;
 internal static class McpCheck {
-    public static async Task RunAsync() {
+    public static async Task RunAsync(Action<bool, string> check) {
         var pipeName = "antmind-mcp-" + Guid.NewGuid().ToString("N");
         Process Start(string dll, params string[] arguments) {
             var info = new ProcessStartInfo("dotnet") { UseShellExecute = false, CreateNoWindow = true, RedirectStandardInput = true, RedirectStandardOutput = true, RedirectStandardError = true, StandardInputEncoding = new UTF8Encoding(false), StandardOutputEncoding = new UTF8Encoding(false), StandardErrorEncoding = new UTF8Encoding(false) };
@@ -105,6 +105,8 @@ internal static class McpCheck {
             var commandNames = JsonDocument.Parse(catalogText).RootElement.GetProperty("commands").EnumerateArray().Select(x => x.GetString()).ToArray();
             if (!commandNames.Contains("UpgradeNetwork") || commandNames.Contains("SetQueenRange") || commandNames.Contains("Visibility"))
                 throw new Exception("MCP catalog does not expose paid network upgrades correctly.");
+            check(commandNames.All(n => n is not ("PlanChamber" or "DigChamber" or "UpgradeChamber" or "CancelChamber")),
+                "institution/chamber-commands-filtered-from-get-actions");
             var createGroup=await Rpc(40,"tools/call",new { name="command",arguments=new {
                 requestId=Guid.NewGuid().ToString(),expectedRevision=networkSnapshot.Snapshot.Revision,kind="CreateGroup",value=0,reason="MCP group check",
                 name="Expedition",task="collect meat",objectiveX=40000,objectiveY=32000 } });

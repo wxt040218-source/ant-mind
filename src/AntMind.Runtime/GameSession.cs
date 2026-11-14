@@ -73,7 +73,7 @@ public sealed partial class GameSession : IAsyncDisposable {
             return EquivalentCommands(previous.Command,command) ? previous.Result : Reject("request_id_reused");
         if (receipts.Count >= 100_000) return Reject("receipt_capacity");
         CommandResult result;
-        if(command.ExpectedRevision==revision && (command.Kind is CommandKind.SaveGame or CommandKind.LoadGame || !world.IsDefeated && command.Kind is CommandKind.PlanBuild or CommandKind.CancelBuild)) {
+        if (command.ExpectedRevision == revision && (command.Kind is CommandKind.SaveGame or CommandKind.LoadGame || !world.IsDefeated && command.Kind is CommandKind.PlanBuild or CommandKind.CancelBuild)) {
             result=ApplyProductionCommand(command);receipts.Add(command.RequestId,(command,result));return result;
         }
         if(command.ExpectedRevision==revision && !world.IsDefeated && command.Kind is CommandKind.ConfigureGroup or CommandKind.CreateGroup or CommandKind.UpdateGroup or CommandKind.DeleteGroup or CommandKind.AssignAnt or CommandKind.AssignAnts or CommandKind.SetGroupParameter or CommandKind.RemoveGroupParameter or CommandKind.SetGroupPoint or CommandKind.RemoveGroupPoint) {
@@ -81,6 +81,12 @@ public sealed partial class GameSession : IAsyncDisposable {
         }
         if(command.ExpectedRevision==revision && !world.IsDefeated && command.Kind is CommandKind.SetInstitution or CommandKind.RollbackInstitution) {
             result=ApplyInstitutionCommand(command); receipts.Add(command.RequestId,(command,result));return result;
+        }
+        // 勘误 v0.1.1（S1.5）：4 个巢穴 CommandKind 的数值已冻结，但真实行为 S2 才接入。
+        // S2 之前一律早拒「未实现」，杜绝合法请求落进通用 switch 空 case 后静默丢弃却返回
+        // Accepted=true / 白推进 revision（假接受 no-op）。枚举值保留不删，S2 换成真路由。
+        if (command.ExpectedRevision == revision && command.Kind is CommandKind.PlanChamber or CommandKind.DigChamber or CommandKind.UpgradeChamber or CommandKind.CancelChamber) {
+            result=Reject("not_implemented");receipts.Add(command.RequestId,(command,result));return result;
         }
         if (command.ExpectedRevision != revision) result = Reject("revision_conflict");
         else if (world.IsDefeated && command.Kind is not (CommandKind.Pause or CommandKind.Speed or CommandKind.ApplyProgram or CommandKind.RollbackProgram)) result = Reject("colony_defeated");
