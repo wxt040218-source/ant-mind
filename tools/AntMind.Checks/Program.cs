@@ -499,6 +499,7 @@ MapPresentationCheck.Run(Check);
 MilestoneCheck.Run(Check);
 BehaviorProgramCheck.Run(Check);
 await InstitutionCheck.Run(Check);
+await NestCheck.Run(Check);
 await McpCheck.RunAsync(Check);
 Console.WriteLine($"All {checks} architectural checks passed.");
 sealed class ExampleRule : IWorldRule {

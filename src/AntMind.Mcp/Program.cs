@@ -67,7 +67,8 @@ public sealed class GameTools(PipeClient client) {
         saves="SaveGame(key=slot,reason), LoadGame(key=slot,reason). Load is paused, restores world/RNG/memory/programs and changes WorldId; ALWAYS pass expectedWorldId from observe to command. list_saves returns metadata only.",
         veterancy="Each ant has independent Level 1..3, Experience, CompletedWork and work remainders; AntLevels lists thresholds and bonuses. XP comes from first exploration, harvesting, first admissions, effective labor and combat, not repeated cargo loops. DSL ant_level/experience/experience_to_next reads own state. Local debug console reuses the same commands and discovery projection.",
         institutions = "SetInstitution(institutionField,institutionTier,reason): change one of reserve_policy, ration_policy, labor_policy, defense_policy, admission_policy to a closed tier; RollbackInstitution(targetInstitutionVersion,reason): restore a recorded snapshot at a NEW version. Both use expectedRevision/expectedWorldId and requestId replay. inspect_institution reads version, appliedTick, reason, five tiers and historyCount only. All policy parameters are per-tick pure projections; DSL institution(\"field\") compares against built-in tier codes and institution_version reads the version, set_institution is a compile-checked intent record, not a global mutation.",
-        protocolVersion = Protocol.Version, commands = Enum.GetNames<CommandKind>().Where(x => x != nameof(CommandKind.ClearGroupProgram) && x != nameof(CommandKind.Visibility) && x != nameof(CommandKind.Recruit) && x != nameof(CommandKind.SetQueenRange) && x != nameof(CommandKind.PlanChamber) && x != nameof(CommandKind.DigChamber) && x != nameof(CommandKind.UpgradeChamber) && x != nameof(CommandKind.CancelChamber)),
+        chambers = "PlanChamber(chamberX,chamberY,chamberType,reason): plan a buildable room on an empty 0..8 cell adjacent to a connected chamber; DigChamber(chamberX,chamberY,reason): reserve wood and start digging a planned cell; UpgradeChamber(chamberX,chamberY,reason): reserve wood for the next level of a connected active room; CancelChamber(chamberX,chamberY,reason): refund only unspent reserved wood. ChamberTypes: granary, nursery, barracks, workshop, corridor. inspect_chamber(chamberX,chamberY) reads one discovered cell; observe exposes nestCapacity and observedChambers only, never Cells. All four use expectedRevision/expectedWorldId/requestId replay.",
+        protocolVersion = Protocol.Version, commands = Enum.GetNames<CommandKind>().Where(x => x != nameof(CommandKind.ClearGroupProgram) && x != nameof(CommandKind.Visibility) && x != nameof(CommandKind.Recruit) && x != nameof(CommandKind.SetQueenRange)),
         network = "UpgradeNetwork(reason): spend food to raise the shared technology level; range and technology unlocks are derived from this level. SetQueenRange is retired. Observe NetworkLevel, NextNetworkRangeCells, NextNetworkUpgradeCost and Technologies.", minimumReserveValues = "0..1000000000", populationCapValues = "current population..100",
         speedValues = new[] {1, 2, 5}, visibilityValues = new[] {"Discovered only; hidden food cannot be revealed"},
         species = new[] {"scout", "hauler", "soldier", "chef", "builder"},
@@ -109,6 +110,16 @@ public sealed class GameTools(PipeClient client) {
             version=s?.InstitutionVersion,appliedTick=s?.InstitutionAppliedTick,reason=s?.InstitutionReason,historyCount=s?.InstitutionHistoryCount,
             fields=s is null?null:new { reserve_policy=s.ReservePolicy,ration_policy=s.RationPolicy,labor_policy=s.LaborPolicy,defense_policy=s.DefensePolicy,admission_policy=s.AdmissionPolicy } });
     }
+    [McpServerTool(Name = "inspect_chamber", ReadOnly=true, Destructive=false, OpenWorld=false), Description("Read one discovered underground chamber cell by 0..8 chamberX/chamberY. Undiscovered cells return the same empty shape; never exposes the full Cells grid.")]
+    public async Task<string> InspectChamber(int chamberX,int chamberY,CancellationToken cancellationToken) {
+        var r=await client.SendAsync(new(Protocol.Version,"observe"),cancellationToken);
+        var view=chamberX<0 || chamberX>=9 || chamberY<0 || chamberY>=9
+            ? ChamberView.Hidden(chamberX,chamberY)
+            : r.Snapshot?.ObservedChambers.FirstOrDefault(v=>v.X==chamberX && v.Y==chamberY) is {} found ? found : ChamberView.Hidden(chamberX,chamberY);
+        return JsonSerializer.Serialize(new { protocolVersion=Protocol.Version,error=r.Error,
+            chamberType=view.ChamberType,level=view.Level,phase=view.Phase,connected=view.Connected,discovered=view.Discovered,
+            constructionWork=view.ConstructionWork,workTarget=view.WorkTarget });
+    }
     [McpServerTool(Name = "observe"), Description("Read the live colony with discovered food only, including ant species definitions, counts, delivery statistics and milestone progress/status/deadlines. Never returns the player's unrestricted map.")]
     public async Task<string> Observe(CancellationToken cancellationToken) =>
         JsonSerializer.Serialize(await client.SendAsync(new(Protocol.Version, "observe"), cancellationToken));
@@ -117,11 +128,12 @@ public sealed class GameTools(PipeClient client) {
         string reason, CancellationToken cancellationToken, string species = AntSpeciesIds.Scout,
         string programSource = "", int groupId=0, int antId=0, string name="", string task="",
         int? rallyX=null,int? rallyY=null,int? objectiveX=null,int? objectiveY=null,int? retreatX=null,int? retreatY=null, string? activity=null,string? foodFilter=null,int? radiusCells=null, int[]? antIds=null,string key="",int? pointX=null,int? pointY=null,string? expectedWorldId=null,
-        string institutionField="",string institutionTier="",int targetInstitutionVersion=0) {
+        string institutionField="",string institutionTier="",int targetInstitutionVersion=0,
+        int chamberX=0,int chamberY=0,string chamberType="") {
         Point? Pair(int? x,int? y) => x.HasValue==y.HasValue ? x.HasValue?new Point(x.Value,y!.Value):null : throw new ArgumentException("Supply both coordinates.");
         if (!Enum.TryParse<CommandKind>(kind, false, out var parsed)) throw new ArgumentException("Unknown command kind.");
         return JsonSerializer.Serialize(await client.SendAsync(
             new(Protocol.Version, "command", new(Guid.Parse(requestId), expectedRevision, parsed, value,
-                reason, species, programSource) { ExpectedWorldId=expectedWorldId is null?null:Guid.Parse(expectedWorldId),GroupId=groupId,AntId=antId,AntIds=antIds?.ToImmutableArray()??[],Key=key,Location=Pair(pointX,pointY),Name=name,Task=task,Activity=activity,FoodFilter=foodFilter,RadiusCells=radiusCells,Rally=Pair(rallyX,rallyY),Objective=Pair(objectiveX,objectiveY),Retreat=Pair(retreatX,retreatY),InstitutionField=institutionField,InstitutionTier=institutionTier,TargetInstitutionVersion=targetInstitutionVersion }), cancellationToken));
+                reason, species, programSource) { ExpectedWorldId=expectedWorldId is null?null:Guid.Parse(expectedWorldId),GroupId=groupId,AntId=antId,AntIds=antIds?.ToImmutableArray()??[],Key=key,Location=Pair(pointX,pointY),Name=name,Task=task,Activity=activity,FoodFilter=foodFilter,RadiusCells=radiusCells,Rally=Pair(rallyX,rallyY),Objective=Pair(objectiveX,objectiveY),Retreat=Pair(retreatX,retreatY),InstitutionField=institutionField,InstitutionTier=institutionTier,TargetInstitutionVersion=targetInstitutionVersion,ChamberX=chamberX,ChamberY=chamberY,ChamberType=chamberType }), cancellationToken));
     }
 }

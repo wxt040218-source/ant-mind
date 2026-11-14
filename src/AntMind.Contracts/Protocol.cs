@@ -83,6 +83,11 @@ public sealed record AntView(int Id, Point Position, int Carry, Point? Target = 
     public ActionStatus ActionStatus { get; init; }
     public string ActionResult { get; init; } = "none";
     public ImmutableArray<ResourceView> ResourceReports { get; init; } = ResourceReports.IsDefault ? [] : ResourceReports;
+    // S2 地下巢穴施工意图：纯 int 格索引与动作码，不进 Point / IWorldObject；-1 表示无意图。
+    [System.Text.Json.Serialization.JsonPropertyName("chamber_x")] public int ChamberX { get; init; } = -1;
+    [System.Text.Json.Serialization.JsonPropertyName("chamber_y")] public int ChamberY { get; init; } = -1;
+    [System.Text.Json.Serialization.JsonPropertyName("chamber_type_code")] public int ChamberTypeCode { get; init; }
+    [System.Text.Json.Serialization.JsonPropertyName("chamber_action")] public int ChamberAction { get; init; }
 }
 public enum ResourceOrigin { Natural, Dropped, Carcass }
 public sealed record ResourceView(int Id, Point Position, int Amount, long LastSeenTick, int MaxCapacity = 0) : IWorldObject {
@@ -231,6 +236,9 @@ public sealed record Snapshot(int SchemaVersion, long Revision, long Tick, bool 
     [System.Text.Json.Serialization.JsonPropertyName("labor_policy")] public string LaborPolicy { get; init; } = "balanced";
     [System.Text.Json.Serialization.JsonPropertyName("defense_policy")] public string DefensePolicy { get; init; } = "measured";
     [System.Text.Json.Serialization.JsonPropertyName("admission_policy")] public string AdmissionPolicy { get; init; } = "fresh_first";
+    // S2 巢穴只暴露聚合容量与已 discovered 的单格投影，不返回 Cells 全量。
+    [System.Text.Json.Serialization.JsonPropertyName("nest_capacity")] public int NestCapacity { get; init; }
+    [System.Text.Json.Serialization.JsonPropertyName("observed_chambers")] public ImmutableArray<ChamberView> ObservedChambers { get; init; } = [];
 
 }
 public sealed record TechnologyEra(int Level,string Name,string Description);

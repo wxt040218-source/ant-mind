@@ -9,7 +9,7 @@ public static class GameRules {
         Memory=Enumerable.Repeat(0,AntDslCompiler.MemorySlots).ToImmutableArray(),LastDecisionBranch="program-replaced",LastInstructionSpent=0,LastError=null
     };
     public static Simulation Create(SpeciesProgramCatalog catalog,IEnumerable<IWorldRule>? extra=null)=>new(new IWorldRule[] {
-        new ExplorationExperienceRule(),new AntExperienceRule(),new ActivitySamplingRule(),new SourceGrowthRule(),new ProductionActionRule(),new WorkRule(),new EconomyStatisticsRule(),new EnemySpawnRule(),new LocalObservationRule(),new QueenCommunicationRule(),new ProgramRule(catalog),new MovementRule(),new EnemyMovementRule(),new ClaimRule(),new FollowRule(),new CombatRule(),new InteractionRule(),new EatingRule(),new ResourceRefreshRule(),new ResourceDiscoveryRule(),new ClaimCleanupRule(),new MilestoneRule()
+        new ExplorationExperienceRule(),new AntExperienceRule(),new ActivitySamplingRule(),new SourceGrowthRule(),new ProductionActionRule(),new WorkRule(),new EconomyStatisticsRule(),new EnemySpawnRule(),new LocalObservationRule(),new QueenCommunicationRule(),new ProgramRule(catalog),new MovementRule(),new EnemyMovementRule(),new ClaimRule(),new FollowRule(),new CombatRule(),new InteractionRule(),new EatingRule(),new ResourceRefreshRule(),new ResourceDiscoveryRule(),new ClaimCleanupRule(),new MilestoneRule(),new NestConstructionRule()
     }.Concat(extra??[]));
     public static WorldState Activate(WorldState world,SpeciesProgramCatalog catalog) {
         var activated = catalog.ActivatePending();

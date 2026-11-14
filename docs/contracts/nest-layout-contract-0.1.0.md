@@ -1,8 +1,17 @@
 # 蚁智内政三件套 · 巢穴规划建设（NestLayout）分册契约
 
-> 版本 v0.1.0 ｜ 契约冻结 ｜ 2026-11-13
+> 版本 v0.1.1 ｜ 契约冻结 ｜ 2026-11-13 ｜ v0.1.1 勘误 2026-11-14
 
 > 本文件只冻结契约、不含实现；实现按 S1/S2/S3 落地。
+
+## v0.1.1 勘误（2026-11-14）
+
+- 文件名与 `contractVersion="0.1.0"` 保持 S0 冻结标识不变；本勘误只登记 S2 实现与冻结正文的可复核偏差，不重写 §2–§9 正文。
+- §5/§6 的 `plan_chamber` 原文要求「目标格 `empty` + `discovered`」。由于旧档/新建默认只有 `core`(index 40) `discovered=true`，若死守该条件则首格之外的任何房间都不可规划，S2 无法闭环。实现放宽为「目标格 `empty` + `phase=="planned"` + 已 `discovered` 或与任一 `ConnectedMask=true` 格 4 邻接」，并在登记蓝图时把该格置 `Discovered=true`；坐标范围 `[0,8]`、类型白名单、不复用 `BuildingView`、不进 `world.Objects` 全部不变。
+- §2.2/§8 的 `wood_reserved` 只冻结了整数预留量，未规定 `CreditLot` 的持有位置。`ItemCredit.Raw()` 对 `FoodTypes.Wood` 返回空 credits，且 `ChamberCell` 字段形状冻结不能新增 credits 集合；实现把 `FoodStore.Take(Wood,cost)` 的 `WoodReserved` 记在单格上、把 `WoodReserved` 纳入 `ItemLedger.Held`，`cancel_chamber` 用 `FoodStore.Put(Wood,reserved,[])` 退未消耗木料，完工由 `core.nest-construction`(Order33) 一次性 `Economy.Consumed`。这保持账本守恒，不改 wire/content/save 版本。
+- §7 允许 `inspect_chamber` 作为独立 method 或复用 `observe`。S2 选择复用 `observe`：`Snapshot` 只新增 `nest_capacity` 与 `ObservedChambers`（`ChamberView` 投影，仅 discovered），不返回 `Cells`；MCP 只读工具数从 16 增为 17，`WireRequest` 与 `Gateway` 分派形状不变。
+- S2 只新增 1 条 `IWorldRule`（Id `core.nest-construction`，Order 33）；`GameRules.Create` 从 22 条规则变为 23 条。局部发现投影扩进既有 `core.local-observation`(Order 5)，不新增 Order 6；BFS/效果聚合只在 Order33 写回 `ConnectedMask` / `CapacityBonus`。
+- S1.5 的三层临时早拒（`GameSession` / `get_actions` / Checks 负向断言）在 S2 全部反转；`institution/chamber-commands-rejected-until-s2` 与 `institution/chamber-commands-filtered-from-get-actions` 不再是有效 label。
 
 本分册从属于 [`colony-era-contract-0.1.0.md`](colony-era-contract-0.1.0.md)（下称「总纲」）。总纲 §2 四条不变式、§3 Order 表、§5 版本表、§7 scenario pack 字段表、§8 验收口径对本分册全部生效。落地阶段 **S2**（依赖 S1 已打通的 save5→6 迁移骨架）。
 

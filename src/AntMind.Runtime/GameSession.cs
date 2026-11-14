@@ -82,11 +82,9 @@ public sealed partial class GameSession : IAsyncDisposable {
         if(command.ExpectedRevision==revision && !world.IsDefeated && command.Kind is CommandKind.SetInstitution or CommandKind.RollbackInstitution) {
             result=ApplyInstitutionCommand(command); receipts.Add(command.RequestId,(command,result));return result;
         }
-        // 勘误 v0.1.1（S1.5）：4 个巢穴 CommandKind 的数值已冻结，但真实行为 S2 才接入。
-        // S2 之前一律早拒「未实现」，杜绝合法请求落进通用 switch 空 case 后静默丢弃却返回
-        // Accepted=true / 白推进 revision（假接受 no-op）。枚举值保留不删，S2 换成真路由。
-        if (command.ExpectedRevision == revision && command.Kind is CommandKind.PlanChamber or CommandKind.DigChamber or CommandKind.UpgradeChamber or CommandKind.CancelChamber) {
-            result=Reject("not_implemented");receipts.Add(command.RequestId,(command,result));return result;
+        // S2：4 个巢穴 CommandKind 的真路由；幂等/requestId/expectedRevision/expectedWorldId 沿用 Apply 顶部与 receipts。
+        if(command.ExpectedRevision==revision && !world.IsDefeated && command.Kind is CommandKind.PlanChamber or CommandKind.DigChamber or CommandKind.UpgradeChamber or CommandKind.CancelChamber) {
+            result=ApplyNestCommand(command); receipts.Add(command.RequestId,(command,result));return result;
         }
         if (command.ExpectedRevision != revision) result = Reject("revision_conflict");
         else if (world.IsDefeated && command.Kind is not (CommandKind.Pause or CommandKind.Speed or CommandKind.ApplyProgram or CommandKind.RollbackProgram)) result = Reject("colony_defeated");
@@ -238,7 +236,11 @@ public sealed partial class GameSession : IAsyncDisposable {
                 RecruitmentCost = world.Config.RecruitmentCost,
                 InstructionBudget = world.Config.BrainBudgets[world.BrainLevel - 1],
                 DecisionInterval = world.Config.BrainIntervals[world.BrainLevel - 1],
-                NextUpgradeCost = world.BrainLevel < 5 ? world.Config.BrainCosts[world.BrainLevel] : 0, InstitutionVersion = world.Institution.Version, InstitutionAppliedTick = world.Institution.AppliedTick, InstitutionReason = world.Institution.Reason, InstitutionHistoryCount = world.Institution.History.Length, ReservePolicy = world.Institution.ReservePolicy, RationPolicy = world.Institution.RationPolicy, LaborPolicy = world.Institution.LaborPolicy, DefensePolicy = world.Institution.DefensePolicy, AdmissionPolicy = world.Institution.AdmissionPolicy
+                NextUpgradeCost = world.BrainLevel < 5 ? world.Config.BrainCosts[world.BrainLevel] : 0, InstitutionVersion = world.Institution.Version, InstitutionAppliedTick = world.Institution.AppliedTick, InstitutionReason = world.Institution.Reason, InstitutionHistoryCount = world.Institution.History.Length, ReservePolicy = world.Institution.ReservePolicy, RationPolicy = world.Institution.RationPolicy, LaborPolicy = world.Institution.LaborPolicy, DefensePolicy = world.Institution.DefensePolicy, AdmissionPolicy = world.Institution.AdmissionPolicy,
+                 NestCapacity = world.Config.NestLayout.NestCapacityBase + world.Nest.CapacityBonus,
+                 ObservedChambers = world.ObservedChambers.IsDefault ? [] : world.ObservedChambers
+                     .Where(i => i >= 0 && i < NestLayout.CellCount && world.Nest.Cells[i].Discovered)
+                     .Select(i => ChamberView.From(i, world.Nest.Cells[i], world.Nest.ConnectedMask[i])).ToImmutableArray()
             };
     }
     public async ValueTask DisposeAsync() { queue.Writer.TryComplete(); await actor; }

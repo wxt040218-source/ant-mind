@@ -23,7 +23,11 @@ public sealed class LocalObservationRule : IWorldRule {
                 BuildingReports=ant.BuildingReports.Concat(world.Objects.All<BuildingView>().Where(x=>Visible(x.Position)).Select(x=>x with {LastObservedTick=world.Tick})).GroupBy(x=>x.Id).Select(g=>g.Last()).OrderBy(x=>x.Id).ToImmutableArray(),
                 ResourceReports = reports.Values.OrderBy(x => x.Id).ToImmutableArray() };
         }
-        return world with { Ants = ants.ToImmutable() };
+        // S2：ObservedChambers 只按 Nest.Cells 的 Discovered 升序稳定投影，不新增 IWorldRule、不暴露 Cells。
+        var observed = world.Nest.Cells.IsDefault || world.Nest.Cells.Length != NestLayout.CellCount
+            ? world.ObservedChambers
+            : Enumerable.Range(0, NestLayout.CellCount).Where(i => world.Nest.Cells[i].Discovered).ToImmutableArray();
+        return world with { Ants = ants.ToImmutable(), ObservedChambers = observed };
     }
 }
 

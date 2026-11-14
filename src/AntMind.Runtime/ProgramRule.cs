@@ -68,6 +68,7 @@ public sealed class ProgramRule : IWorldRule {
                 LastDecisionBranch = decision.Branch, LastInstructionSpent = decision.Spent,
                 LastError = decision.Error, RecentDecisions = recent,
                 ProgramVersion=programVersion,
+                ChamberX=decision.ChamberX,ChamberY=decision.ChamberY,ChamberTypeCode=decision.ChamberTypeCode,ChamberAction=decision.ChamberAction,
                 NextDecisionTick = world.Tick + world.Config.BrainIntervals[level] };
         }
         return world with { Ants = ants.ToImmutable() };
@@ -94,7 +95,11 @@ public sealed class ProgramRule : IWorldRule {
                 NearbyClaims=world.Claims.Where(c=>c.ExpiresTick>world.Tick && nearby.Any(f=>f.Id==c.FoodId)).ToImmutableArray(),
                 NearbyEnemies=world.Enemies.Where(e=>CombatMath.Distance(e.Position,ant.Position)<=species.VisionCells*Point.UnitsPerCell).ToImmutableArray(),
                 InstitutionVersion = world.Institution.Version,
-                InstitutionTierCodes = world.Institution.Fields.TierCodes
+                InstitutionTierCodes = world.Institution.Fields.TierCodes,
+                NestCapacity = world.Config.NestLayout.NestCapacityBase + world.Nest.CapacityBonus,
+                ObservedChamberViews = world.ObservedChambers.IsDefault ? [] : world.ObservedChambers
+                    .Where(i => i >= 0 && i < NestLayout.CellCount && world.Nest.Cells[i].Discovered)
+                    .Select(i => ChamberView.From(i, world.Nest.Cells[i], world.Nest.ConnectedMask[i])).ToImmutableArray()
             };
     }
 

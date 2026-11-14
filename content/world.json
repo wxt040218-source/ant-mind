@@ -358,7 +358,21 @@
       "grid_height": 9,
       "core_x": 4,
       "core_y": 4,
-      "max_level": 3
+      "max_level": 3,
+      "chamber_types": ["empty", "core", "granary", "nursery", "barracks", "workshop", "corridor"],
+      "wood_cost": {"granary": 6, "nursery": 8, "barracks": 10, "workshop": 12, "corridor": 2},
+      "work_target": {"granary": 100, "nursery": 140, "barracks": 160, "workshop": 200, "corridor": 40},
+      "capacity_per_level": 40,
+      "egg_cost_basis": 100,
+      "egg_cost_step": 15,
+      "attack_basis": 100,
+      "attack_step": 20,
+      "defense_basis": 100,
+      "defense_step": 10,
+      "process_slots_per_level": 1,
+      "process_speed_basis": 100,
+      "process_speed_step": 25,
+      "nest_capacity_base": 1200
     }
   }
 }

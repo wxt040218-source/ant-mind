@@ -37,6 +37,9 @@ public sealed record Perception(int AntId, long Tick, Point Position, Point Nest
     // 只读制度投影：版本 + 五字段档位码（顺序与 InstitutionCatalog.Fields 一致），不含 History/全图。
     public int InstitutionVersion { get; init; } = 1;
     public ImmutableArray<int> InstitutionTierCodes { get; init; } = [];
+    // S2 地下巢穴局部投影：聚合容量 + 已 discovered 的单格视图，永不暴露 Cells 全量。
+    public int NestCapacity { get; init; }
+    public ImmutableArray<ChamberView> ObservedChamberViews { get; init; } = [];
 }
 public sealed record Decision(string Branch, int Spent, Point? Target, AntAction Action,
     ImmutableArray<int> Memory = default, string? Error = null,
@@ -55,6 +58,11 @@ public sealed record Decision(string Branch, int Spent, Point? Target, AntAction
     // DSL set_institution 的只读意图，不写全局状态；唯一全局写入口是 Runtime actor 命令。
     public string InstitutionField { get; init; } = "";
     public string InstitutionTier { get; init; } = "";
+    // S2 地下巢穴施工意图（纯 int 码）：不写 world，Order33 只读消费；ChamberX=-1 表示无意图。
+    public int ChamberX { get; init; } = -1;
+    public int ChamberY { get; init; } = -1;
+    public int ChamberTypeCode { get; init; }
+    public int ChamberAction { get; init; }
 }
 public interface IAntProgram { Decision Execute(Perception perception, InstructionBudget budget); }
 public sealed class InstructionBudget(int limit) {

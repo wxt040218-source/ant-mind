@@ -32,9 +32,17 @@ internal static class McpCheck {
             await Rpc(1, "initialize", new { protocolVersion = "2025-06-18", capabilities = new { }, clientInfo = new { name = "antmind-checks", version = "1" } });
             await mcp.StandardInput.WriteLineAsync(JsonSerializer.Serialize(new { jsonrpc = "2.0", method = "notifications/initialized" }));
             var tools = await Rpc(2, "tools/list", new { });
-            if (tools.GetProperty("tools").GetArrayLength() != 16) throw new Exception("Unexpected tool schema.");
+            if (tools.GetProperty("tools").GetArrayLength() != 17) throw new Exception("Unexpected tool schema.");
             var handshakeView = await new PipeClient(pipeName).SendAsync(new(Protocol.Version, "observe"));
             if (handshakeView.Snapshot?.AgentConnected != true) throw new Exception("Completed MCP initialize handshake did not light the indicator.");
+            // S2：inspect_chamber 真实 tools/call 冒烟——已勘察的 core 可见，未勘察格不泄露 Cells。
+            var chamberProbe = await Rpc(97, "tools/call", new { name = "inspect_chamber", arguments = new { chamberX = 4, chamberY = 4 } });
+            var chamberProbeText = chamberProbe.GetProperty("content")[0].GetProperty("text").GetString()!;
+            var hiddenProbe = await Rpc(96, "tools/call", new { name = "inspect_chamber", arguments = new { chamberX = 0, chamberY = 0 } });
+            var hiddenProbeText = hiddenProbe.GetProperty("content")[0].GetProperty("text").GetString()!;
+            check(chamberProbeText.Contains("core") && hiddenProbeText.Contains("empty") &&
+                  !chamberProbeText.Contains("Cells") && !hiddenProbeText.Contains("Cells"),
+                "nest/visibility/inspect-chamber-core");
             var catalog=await Rpc(98,"tools/call",new {name="get_catalog",arguments=new {}});
             var catalogJson=JsonDocument.Parse(catalog.GetProperty("content")[0].GetProperty("text").GetString()!).RootElement;
             if(catalogJson.GetProperty("TechnologyLevel").GetInt32()!=1 || !catalogJson.GetProperty("Unlocks").EnumerateArray().Any(x=>x.GetProperty("Id").GetString()=="building.workshop" && x.GetProperty("RequiredNetworkLevel").GetInt32()==2 && !x.GetProperty("Unlocked").GetBoolean()))throw new Exception("MCP technology catalog missing kitchen gate.");
@@ -105,8 +113,8 @@ internal static class McpCheck {
             var commandNames = JsonDocument.Parse(catalogText).RootElement.GetProperty("commands").EnumerateArray().Select(x => x.GetString()).ToArray();
             if (!commandNames.Contains("UpgradeNetwork") || commandNames.Contains("SetQueenRange") || commandNames.Contains("Visibility"))
                 throw new Exception("MCP catalog does not expose paid network upgrades correctly.");
-            check(commandNames.All(n => n is not ("PlanChamber" or "DigChamber" or "UpgradeChamber" or "CancelChamber")),
-                "institution/chamber-commands-filtered-from-get-actions");
+            check(new[] { "PlanChamber", "DigChamber", "UpgradeChamber", "CancelChamber" }.All(commandNames.Contains),
+                "nest/command/four-kinds-get-actions");
             var createGroup=await Rpc(40,"tools/call",new { name="command",arguments=new {
                 requestId=Guid.NewGuid().ToString(),expectedRevision=networkSnapshot.Snapshot.Revision,kind="CreateGroup",value=0,reason="MCP group check",
                 name="Expedition",task="collect meat",objectiveX=40000,objectiveY=32000 } });

@@ -1,6 +1,6 @@
 # 蚁智内政三件套 · 文明制度（Institution）分册契约
 
-> 版本 v0.1.1 ｜ 契约冻结 ｜ 2026-11-13 ｜ v0.1.1 勘误 2026-11-14
+> 版本 v0.1.2 ｜ 契约冻结 ｜ 2026-11-13 ｜ v0.1.1 勘误 2026-11-14 ｜ v0.1.2 S2 反转登记 2026-11-14
 
 > 本文件只冻结契约、不含实现；实现按 S1/S2/S3 落地。
 
@@ -11,6 +11,12 @@
 - 锚点题三档的区分变量改由上述 MCP command 的下发次数、阶段组合与 `RollbackInstitution` 重放构成；DSL `set_institution` 只可作为题面里的意图记录，不作为制度生效与否的判据。
 - 登记实现偏差（本轮只登记不改）：`admission_policy` 冻结口径（§2.2）要求 `fresh_first` 按 `CreditLot.CreatedTick`、`bulk_first` 按 `Quantity`、`near_first` 按距巢、`type_first` 按 `Value` 排序且次键恒为 `ResourceId` 升序；但本库 `CreditLot` 仅有 `(Quantity, PointsPerUnit)`（`src/AntMind.Contracts/Production.cs:6`），无 `CreatedTick` / `ResourceId`，当前实现改以 `AntId` 作稳定次键。受数据结构限制，仅排序键不同，物品总量与账本守恒、`FirstAdmissionPoints` 判定不受影响；留 S4 标定前订正实现或契约，S1.5 不修实现、不改 §2.2 正文。
 - 登记 S1.5 新增 Check label：`institution/chamber-commands-rejected-until-s2`、`institution/chamber-commands-filtered-from-get-actions`、`contract/determinism/default-institution-baseline-equivalence`。
+
+## v0.1.2 S2 反转登记（2026-11-14）
+
+- S1.5 的两条负向 Check label 已在 S2 撤销：`institution/chamber-commands-rejected-until-s2` 替换为 `institution/chamber-commands-accepted-after-s2`（只验证 `PlanChamber` 不再早拒），`institution/chamber-commands-filtered-from-get-actions` 替换为 `nest/command/four-kinds-get-actions`（验证 `get_actions` 暴露四个 Chamber kind）。
+- 四个 Chamber kind 的完整真接受由 `tools/AntMind.Checks/NestCheck.cs` 的 `nest/command/four-kinds-real-accepted` 坐实：通过合法 save6 注入 active 房间与木料，依次下发 `PlanChamber` / `DigChamber` / `UpgradeChamber` / `CancelChamber`，四条命令均 `Accepted=true` 且 `Code="applied"`。
+- `contract/determinism/default-institution-baseline-equivalence` 保持有效；制度分册的字段/档位白名单、四条不变式、Order 表、版本三跳、SaveMigration 六步全部不变。
 
 本分册从属于 [`colony-era-contract-0.1.0.md`](colony-era-contract-0.1.0.md)（下称「总纲」）。总纲 §2 四条不变式、§3 Order 表、§5 版本表、§7 scenario pack 字段表、§8 验收口径对本分册全部生效，本分册不重定义、不冲突。落地阶段 **S1**。
 

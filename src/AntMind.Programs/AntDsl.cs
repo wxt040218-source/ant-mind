@@ -74,6 +74,11 @@ internal sealed class DslExecution {
     public bool ReportDiscovery { get; private set; }
     public string InstitutionField { get; private set; } = "";
     public string InstitutionTier { get; private set; } = "";
+    // S2 巢穴施工意图：纯 int 码，Order33 只读消费；ChamberX=-1 表示无意图。
+    public int ChamberX { get; private set; } = -1;
+    public int ChamberY { get; private set; } = -1;
+    public int ChamberTypeCode { get; private set; }
+    public int ChamberAction { get; private set; }
     public Point? Target { get; private set; }
     public AntAction Action { get; private set; }
     public string Branch { get; private set; } = "dsl-idle";
@@ -176,6 +181,7 @@ internal sealed class DslExecution {
             "explore_x" => ExploreTarget().X,
             "explore_y" => ExploreTarget().Y,
             "institution_version" => perception.InstitutionVersion,
+            "nest_capacity" => perception.NestCapacity,
             _ when InstitutionCatalog.TryBuiltinCode(name, out var builtinCode) => builtinCode,
             _ when variables.TryGetValue(name, out var value) => value,
             _ => throw new DslRuntimeException($"Unknown variable '{name}'.")
@@ -268,6 +274,10 @@ internal sealed class DslExecution {
             "ally_health" => AllyAt(values[0])?.Health??0,
             "institution" when values.Length == 1 => CurrentInstitutionTierCode(values[0]),
             "stock" => (int)Math.Min(int.MaxValue,perception.NestStock.GetValueOrDefault(FoodName(values[0]))),
+            "chamber_count" when values.Length == 1 => ChamberCount(values[0]),
+            "chamber_connected" when values.Length == 2 => ChamberAt(values[0],values[1])?.Connected == true ? 1 : 0,
+            "chamber_level" when values.Length == 2 => ChamberAt(values[0],values[1])?.Level ?? 0,
+            "chamber_phase" when values.Length == 2 => ChamberAt(values[0],values[1]) is {} phaseCell ? ChamberCatalog.PhaseCode(phaseCell.Phase) : 0,
             _ => throw new DslRuntimeException($"Invalid function or argument count '{name}'.")
         };
     }
@@ -277,6 +287,20 @@ internal sealed class DslExecution {
     private int CurrentInstitutionTierCode(int fieldCode) =>
         fieldCode is < 1 or > 5 || perception.InstitutionTierCodes.IsDefault || perception.InstitutionTierCodes.Length != 5
             ? 0 : perception.InstitutionTierCodes[fieldCode - 1];
+    // S2 巢穴只读量：Perception 仅含已 discovered 的 ChamberView；未发现/越界一律 0 或 empty（码 0）。
+    private ChamberView? ChamberAt(int x,int y) {
+        if(x<0 || x>=NestLayout.GridWidth || y<0 || y>=NestLayout.GridHeight) return null;
+        if(perception.ObservedChamberViews.IsDefault) return null;
+        foreach(var view in perception.ObservedChamberViews){Spend();if(view.X==x && view.Y==y)return view;}
+        return null;
+    }
+    private int ChamberCount(int typeCode) {
+        var type=ChamberCatalog.TypeName(typeCode);
+        var count=0;
+        if(perception.ObservedChamberViews.IsDefault) return 0;
+        foreach(var view in perception.ObservedChamberViews){Spend();if(view.Connected && view.Discovered && (type.Length==0 || view.ChamberType==type))count++;}
+        return count;
+    }
     private int SourceIndex(int index,bool queen) {Spend();var list=queen?perception.QueenSources:perception.Sources;return index>=0 && index<list.Length?list[index].Id:0;}
     private int BuildingIndex(int index,bool queen) {Spend();var list=queen?perception.QueenBuildings:perception.Buildings;return index>=0 && index<list.Length?list[index].Id:0;}
     public void ActionStatement(string name, int[] values) {
@@ -321,6 +345,14 @@ internal sealed class DslExecution {
                 InstitutionField = InstitutionCatalog.FieldName(values[0]);
                 InstitutionTier = InstitutionCatalog.TierName(values[1]);
                 Branch = "set_institution"; break;
+            case "plan_chamber" when values.Length == 3:
+                ChamberX=values[0];ChamberY=values[1];ChamberTypeCode=values[2];ChamberAction=1;Branch="plan_chamber";break;
+            case "dig_chamber" when values.Length == 2:
+                ChamberX=values[0];ChamberY=values[1];ChamberAction=2;Branch="dig_chamber";break;
+            case "upgrade_chamber" when values.Length == 2:
+                ChamberX=values[0];ChamberY=values[1];ChamberAction=3;Branch="upgrade_chamber";break;
+            case "cancel_chamber" when values.Length == 2:
+                ChamberX=values[0];ChamberY=values[1];ChamberAction=4;Branch="cancel_chamber";break;
             case "wait" when values.Length == 0:
                 Target = null;
                 Action = AntAction.Wait;
@@ -337,7 +369,8 @@ internal sealed class DslExecution {
             ? Branch : branch,
         budget.Initial - budget.Remaining, Target, Action, memory.ToImmutable(), error, RequestQueenInfo, ReportDiscovery) { Production=Production,AttackTargetId = AttackTargetId, PickupFoodId=PickupFoodId, EatFood=EatFood,FollowAntId=FollowAntId,FollowDistance=FollowDistance,
             ClaimFoodId=ClaimFoodId,ClaimQuantity=ClaimQuantity,ClaimDuration=ClaimDuration,ReleaseClaim=ReleaseClaim,EatHolderId=EatHolderId,
-            InstitutionField=InstitutionField,InstitutionTier=InstitutionTier };
+            InstitutionField=InstitutionField,InstitutionTier=InstitutionTier,
+            ChamberX=ChamberX,ChamberY=ChamberY,ChamberTypeCode=ChamberTypeCode,ChamberAction=ChamberAction };
 
     private int FoodCode(string id) {
         for(int i=0;i<perception.FoodDefinitions.Length;i++) if(perception.FoodDefinitions[i].Id==id) return i+1;
@@ -519,11 +552,12 @@ internal sealed class AntDslParser {
         "max_health", "food_fruit", "food_meat", "carry_food_type", "nest_fruit", "nest_meat", "nearest_id", "nearest_food_type", "group_id", "group_order_version", "rally_x", "rally_y", "objective_x", "objective_y", "retreat_x", "retreat_y", "nearest_ally_id", "nearest_group_member_id",
         "health", "nearest_enemy_health", "species_soldier", "nearest_enemy_id", "nearest_enemy_x", "nearest_enemy_y", "nearest_enemy_distance", "true", "false", "ant_id", "tick", "x", "y", "nest_x", "nest_y", "width", "height",
         "carry", "capacity", "species_scout", "species_hauler", "nearest_amount", "nearest_x", "nearest_y",
-        "at_nest", "nearest_distance", "action_status", "queen_info_tick", "queen_request_status", "queen_report_status", "explore_x", "explore_y", "queen_connected", "queen_count", "queen_amount", "queen_x", "queen_y"
+        "at_nest", "nearest_distance", "action_status", "queen_info_tick", "queen_request_status", "queen_report_status", "explore_x", "explore_y", "queen_connected", "queen_count", "queen_amount", "queen_x", "queen_y",
+        "nest_capacity"
     };
-    private static readonly HashSet<string> ExpressionFunctions = new(StringComparer.Ordinal) { "recipe_ready","recipe_unlocked","food_value","source_id_at", "queen_source_id_at", "building_id_at", "queen_building_id_at", "source_x", "source_y", "source_amount", "source_type", "queen_source_x", "queen_source_y", "queen_source_amount", "queen_source_type", "building_x", "building_y", "building_ready", "building_busy", "building_can_feed", "building_phase", "building_material", "building_cost", "building_work", "recipe_work", "holder_stock", "holder_output", "abs", "min", "max", "queen_x_at", "queen_y_at", "queen_amount_at", "queen_food_type_at", "claimed_amount", "ally_x", "ally_y", "ally_health", "stock", "institution" };
+    private static readonly HashSet<string> ExpressionFunctions = new(StringComparer.Ordinal) { "recipe_ready","recipe_unlocked","food_value","source_id_at", "queen_source_id_at", "building_id_at", "queen_building_id_at", "source_x", "source_y", "source_amount", "source_type", "queen_source_x", "queen_source_y", "queen_source_amount", "queen_source_type", "building_x", "building_y", "building_ready", "building_busy", "building_can_feed", "building_phase", "building_material", "building_cost", "building_work", "recipe_work", "holder_stock", "holder_output", "abs", "min", "max", "queen_x_at", "queen_y_at", "queen_amount_at", "queen_food_type_at", "claimed_amount", "ally_x", "ally_y", "ally_health", "stock", "institution", "chamber_count", "chamber_connected", "chamber_level", "chamber_phase" };
     private static readonly HashSet<string> Actions = new(StringComparer.Ordinal) {
-        "harvest","deposit","withdraw","transfer","work","process", "pickup_from", "eat", "eat_from", "follow", "claim_food", "release_claim", "attack", "set_target", "move_to", "pickup", "deliver", "wait", "drop", "request_queen_info", "report_discovery", "set_institution"
+        "harvest","deposit","withdraw","transfer","work","process", "pickup_from", "eat", "eat_from", "follow", "claim_food", "release_claim", "attack", "set_target", "move_to", "pickup", "deliver", "wait", "drop", "request_queen_info", "report_discovery", "set_institution", "plan_chamber", "dig_chamber", "upgrade_chamber", "cancel_chamber"
     };
     static AntDslParser() {
         Builtins.Add("institution_version");
@@ -589,10 +623,27 @@ internal sealed class AntDslParser {
                 new DslNumber(InstitutionCatalog.FieldCode(fieldToken.Text)),
                 new DslNumber(InstitutionCatalog.TierCode(fieldToken.Text, tierToken.Text))]));
         }
+        if (identifier.Text == "plan_chamber") {
+            Expect("(");
+            var literals = new List<DslExpression>();
+            if (!Is(")")) {
+                do {
+                    if (literals.Count == 2) {
+                        var typeToken = Expect(DslTokenKind.String, "Expected a quoted chamber type.");
+                        if (!ChamberCatalog.IsBuildable(typeToken.Text)) ErrorAt(typeToken, $"Invalid chamber type '{typeToken.Text}'.");
+                        literals.Add(new DslNumber(ChamberCatalog.TypeCode(typeToken.Text)));
+                    } else literals.Add(ParseExpression());
+                } while (Match(","));
+            }
+            Expect(")");
+            if (literals.Count != 3) ErrorAt(identifier, "Action 'plan_chamber' expects 3 argument(s).");
+            Expect(";");
+            return Node(new DslAction(identifier.Text, literals));
+        }
         var arguments = ParseArguments(); Expect(";");
         var expected = identifier.Text switch {
-            "harvest" or "process" or "set_target" or "move_to" or "follow" or "eat_from" or "set_institution" => 2,
-            "deposit" or "withdraw" or "transfer" or "claim_food" => 3,
+            "harvest" or "process" or "set_target" or "move_to" or "follow" or "eat_from" or "set_institution" or "dig_chamber" or "upgrade_chamber" or "cancel_chamber" => 2,
+            "deposit" or "withdraw" or "transfer" or "claim_food" or "plan_chamber" => 3,
             "work" or "eat" or "pickup_from" => 1,
             "release_claim" => 0,
             "attack" => 1,
@@ -683,11 +734,21 @@ internal sealed class AntDslParser {
                     if (!InstitutionCatalog.IsField(fieldToken.Text)) ErrorAt(fieldToken, $"Invalid institution field '{fieldToken.Text}'.");
                     return Node(new DslCall(identifier.Text, [new DslNumber(InstitutionCatalog.FieldCode(fieldToken.Text))]));
                 }
+                if (identifier.Text == "chamber_count") {
+                    var literals = new List<DslToken>();
+                    if (!Is(")")) { do { literals.Add(Expect(DslTokenKind.String, "Expected a quoted chamber type.")); } while (Match(",")); }
+                    Expect(")");
+                    if (literals.Count != 1) ErrorAt(identifier, "Function 'chamber_count' expects 1 argument(s).");
+                    var typeToken = literals[0];
+                    if (typeToken.Text.Length > 0 && !ChamberCatalog.IsType(typeToken.Text))
+                        ErrorAt(typeToken, $"Invalid chamber type '{typeToken.Text}'.");
+                    return Node(new DslCall(identifier.Text, [new DslNumber(ChamberCatalog.TypeCode(typeToken.Text))]));
+                }
                 if (!ExpressionFunctions.Contains(identifier.Text)) ErrorAt(identifier, $"Unknown expression function '{identifier.Text}'.");
                 var args = new List<DslExpression>();
                 if (!Is(")")) { do { args.Add(ParseExpression()); } while (Match(",")); }
                 Expect(")");
-                var expected = identifier.Text switch { "recipe_unlocked" or "food_value" or "source_id_at" or "queen_source_id_at" or "building_id_at" or "queen_building_id_at" or "source_x" or "source_y" or "source_amount" or "source_type" or "queen_source_x" or "queen_source_y" or "queen_source_amount" or "queen_source_type" or "building_x" or "building_y" or "building_ready" or "building_busy" or "building_can_feed" or "building_phase" or "building_material" or "building_cost" or "building_work" or "recipe_work" or "abs" or "queen_x_at" or "queen_y_at" or "queen_amount_at" or "queen_food_type_at" or "claimed_amount" or "ally_x" or "ally_y" or "ally_health" or "stock" or "institution" => 1, "recipe_ready" or "holder_stock" or "holder_output" or "min" or "max" => 2, _ => -1 };
+                var expected = identifier.Text switch { "recipe_unlocked" or "food_value" or "source_id_at" or "queen_source_id_at" or "building_id_at" or "queen_building_id_at" or "source_x" or "source_y" or "source_amount" or "source_type" or "queen_source_x" or "queen_source_y" or "queen_source_amount" or "queen_source_type" or "building_x" or "building_y" or "building_ready" or "building_busy" or "building_can_feed" or "building_phase" or "building_material" or "building_cost" or "building_work" or "recipe_work" or "abs" or "queen_x_at" or "queen_y_at" or "queen_amount_at" or "queen_food_type_at" or "claimed_amount" or "ally_x" or "ally_y" or "ally_health" or "stock" or "institution" or "chamber_count" => 1, "recipe_ready" or "holder_stock" or "holder_output" or "min" or "max" or "chamber_connected" or "chamber_level" or "chamber_phase" => 2, _ => -1 };
                 if (args.Count != expected) ErrorAt(identifier, $"Function '{identifier.Text}' expects {expected} argument(s).");
                 return Node(new DslCall(identifier.Text, args));
             }

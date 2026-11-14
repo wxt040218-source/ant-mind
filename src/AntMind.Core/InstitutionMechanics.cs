@@ -8,7 +8,7 @@ namespace AntMind.Core;
 // so the existing 460 architectural checks remain byte-for-byte deterministic.
 // 勘误 v0.1.1（S1.5）：全默认档位等价于「无制度偏移」，所有消费分支在五字段皆默认时
 // 一律退回 S1 之前的旧序 / 旧阈值，坐实 460 基线逐帧不变；只有经 CommandKind.SetInstitution
-// 显式立法后（任一字段非默认）才启用新分支。4 个 Chamber kind 由 GameSession 早拒至 S2。
+// 显式立法后（任一字段非默认）才启用新分支。4 个 Chamber kind 已在 S2 接入 GameSession 真路由。
 public static class InstitutionMechanics {
     // 五字段全默认 = 旧基线；直读属性，避免每次分配 InstitutionFields 快照。
     public static bool IsDefaultInstitution(WorldState world) =>

@@ -1,5 +1,5 @@
-// VERSION=0.1.1
-// 0.1.1: S1.5 封住 S2 巢穴命令空转，加入默认制度档位 1200 Tick 基线对账。
+// VERSION=0.1.2
+// 0.1.2: S2 反转 S1.5 巢穴命令早拒断言，PlanChamber 改走真路由；四 kind 完整真接受由 NestCheck 覆盖。
 using System.Collections.Immutable;
 using System.Reflection;
 using System.Text.Json;
@@ -63,8 +63,9 @@ internal static class InstitutionCheck {
         var catalog = new SpeciesProgramCatalog(config.AntTypes.Select(x => x.Id));
         var simulation = GameRules.Create(catalog);
         var rules = (ImmutableArray<IWorldRule>)rulesField!.GetValue(simulation)!;
-        check(rules.Length == 22 && rules.All(r => !r.Id.StartsWith("institution", StringComparison.Ordinal)) &&
-              rules.Select(r => r.Id).Distinct(StringComparer.Ordinal).Count() == 22 &&
+        check(rules.Length == 23 && rules.All(r => !r.Id.StartsWith("institution", StringComparison.Ordinal)) &&
+              rules.Select(r => r.Id).Distinct(StringComparer.Ordinal).Count() == 23 &&
+              rules.Single(r => r.Id == "core.nest-construction").Order == 33 &&
               Enum.GetNames<CommandKind>().Contains("PlanChamber") && Enum.GetNames<CommandKind>().Contains("CancelChamber"),
             "institution/order/no-new-rule");
 
@@ -96,20 +97,17 @@ internal static class InstitutionCheck {
             await session.ExecuteAsync(build(await session.ObserveAsync()));
 
         var chamberBefore = await session.ObserveAsync();
-        var chamberKinds = new[] { CommandKind.PlanChamber, CommandKind.DigChamber, CommandKind.UpgradeChamber, CommandKind.CancelChamber };
-        var chamberResults = new List<CommandResult>();
-        foreach (var kind in chamberKinds)
-            chamberResults.Add(await Send(v => new GameCommand(Guid.NewGuid(), v.Revision, kind, Reason: "s2 not implemented") {
-                ChamberX = 1, ChamberY = 2, ChamberType = "storage", ExpectedWorldId = v.WorldId
-            }));
+        var chamberResult = await Send(v => new GameCommand(Guid.NewGuid(), v.Revision, CommandKind.PlanChamber, Reason: "s2 nest") {
+            ChamberX = 4, ChamberY = 3, ChamberType = "granary", ExpectedWorldId = v.WorldId
+        });
         var chamberAfter = await session.ObserveAsync();
-        check(chamberResults.All(r => !r.Accepted && r.Code == "not_implemented") &&
-              chamberAfter.Revision == chamberBefore.Revision && chamberAfter.Tick == chamberBefore.Tick &&
+        check(chamberResult.Accepted && chamberResult.Code == "applied" && chamberResult.Code != "not_implemented" &&
+              chamberAfter.Revision == chamberBefore.Revision + 1 && chamberAfter.Tick == chamberBefore.Tick &&
               chamberAfter.FirstAdmissionPoints == chamberBefore.FirstAdmissionPoints &&
               chamberAfter.Delivered == chamberBefore.Delivered && chamberAfter.Inventory == chamberBefore.Inventory &&
               chamberAfter.DevelopmentValue == chamberBefore.DevelopmentValue && chamberAfter.Generated == chamberBefore.Generated &&
               chamberAfter.Stock.Count == chamberBefore.Stock.Count,
-            "institution/chamber-commands-rejected-until-s2");
+            "institution/chamber-commands-accepted-after-s2");
 
         var rejectedField = await Send(v => new GameCommand(Guid.NewGuid(), v.Revision, CommandKind.SetInstitution, Reason: "bad field") { InstitutionField = "bogus", InstitutionTier = "strict" });
         var rejectedTier = await Send(v => new GameCommand(Guid.NewGuid(), v.Revision, CommandKind.SetInstitution, Reason: "bad tier") { InstitutionField = "reserve_policy", InstitutionTier = "bogus" });

@@ -57,9 +57,12 @@ public static class SavedGames {
                 e.TargetChamberY is < -1 or >= NestLayout.GridHeight))throw new InvalidDataException("Invalid creature kind.");
         }
         try {w.Institution.Validate();w.Nest.Validate();}catch(ArgumentException){throw new InvalidDataException("Invalid colony era state.");}
+        var observed=w.ObservedChambers;
         if(w.CreatureSeed==0 || w.NestSeed==0 || w.Institution.AppliedTick>w.Tick ||
             w.BlockedCells.IsDefault || w.BlockedCells.Any(c=>c<0 || c>=w.Config.Width*w.Config.Height) ||
-            w.ObservedChambers.IsDefault || w.ObservedChambers.Any(c=>c<0 || c>=NestLayout.GridWidth*NestLayout.GridHeight))
+            observed.IsDefault || observed.Any(c=>c<0 || c>=NestLayout.CellCount) ||
+            observed.Skip(1).Where((c,i)=>c<=observed[i]).Any() ||
+            !observed.SequenceEqual(Enumerable.Range(0,NestLayout.CellCount).Where(i=>w.Nest.Cells[i].Discovered)))
             throw new InvalidDataException("Invalid colony era state.");
         ValidateStore(w.Stock,w.Config);
         if(w.NextResourceId<=w.Objects.All<ResourceView>().Select(x=>x.Id).DefaultIfEmpty(0).Max() || w.NextEnemyId<=w.Objects.All<EnemyView>().Select(x=>x.Id).DefaultIfEmpty(0).Max() || w.NextBuildingId<=w.Objects.All<BuildingView>().Select(x=>x.Id).DefaultIfEmpty(0).Max())throw new InvalidDataException("Invalid next identity.");

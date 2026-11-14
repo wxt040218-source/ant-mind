@@ -13,6 +13,8 @@ public static class ItemLedger {
         foreach(var f in w.Resources)Add(f.FoodType,f.Amount);
         foreach(var source in w.Objects.All<SourceView>())Add(source.ItemType,source.Amount);
         foreach(var b in w.Objects.All<BuildingView>()){Store(b.Store);Store(b.Output);Store(b.WorkInProgress);}
+        // S2:木料被 Take 到地下房间的 WoodReserved 后仍是实物，直到完工才经 Economy.Consumed 出账。
+        foreach(var cell in w.Nest.Cells)if(cell.WoodReserved>0)Add(FoodTypes.Wood,cell.WoodReserved);
         return sums.ToImmutableDictionary(StringComparer.Ordinal);
     }
     public static ImmutableDictionary<string,long> Imbalance(WorldState w) {
