@@ -38,7 +38,15 @@ public sealed record WorldConfig(int Width = 64, int Height = 64, int InitialAnt
     public ImmutableArray<int> BrainBudgets { get; init; } = [64, 128, 256, 512, 1024];
     public ImmutableArray<int> BrainIntervals { get; init; } = [10, 8, 6, 4, 2];
     public ImmutableArray<int> BrainCosts { get; init; } = [0, 100, 250, 600, 1500];
+    public InstitutionConfig Institutions { get; init; } = new();
+    public CreatureConfig Creatures { get; init; } = new();
+    public NestLayoutConfig NestLayout { get; init; } = new();
     public void Validate() {
+        if (Institutions is null || Creatures is null || NestLayout is null)
+            throw new ArgumentException("Unsupported world configuration.");
+        Institutions.Validate();
+        Creatures.Validate();
+        NestLayout.Validate();
         Veterancy.Validate();
         MilestoneRule.Validate(Milestones);
         Combat.Validate();
@@ -151,6 +159,14 @@ public sealed record WorldState {
         ImmutableDictionary<string, long>.Empty.WithComparers(StringComparer.Ordinal);
     public ImmutableDictionary<string, int> ActiveProgramVersions { get; init; } =
         ImmutableDictionary<string, int>.Empty.WithComparers(StringComparer.Ordinal);
+    [System.Text.Json.Serialization.JsonPropertyName("creature_seed")] public ulong CreatureSeed { get; init; }
+    [System.Text.Json.Serialization.JsonPropertyName("nest_seed")] public ulong NestSeed { get; init; }
+    [System.Text.Json.Serialization.JsonPropertyName("nest")] public NestLayout Nest { get; init; } = NestLayout.Default;
+    [System.Text.Json.Serialization.JsonPropertyName("institution")] public InstitutionState Institution { get; init; } = InstitutionState.Initial(0);
+    [System.Text.Json.Serialization.JsonPropertyName("blocked_cells")] public ImmutableArray<int> BlockedCells { get; init; } = [];
+    [System.Text.Json.Serialization.JsonPropertyName("observed_chambers")] public ImmutableArray<int> ObservedChambers { get; init; } = [NestLayout.CoreIndex];
+    // 本 Tick 制度参数只读快照：Advance 在跑 rules 前注入，[JsonIgnore] 不落盘、不读 RandomState。
+    [System.Text.Json.Serialization.JsonIgnore] public InstitutionParameters? ActiveParameters { get; init; }
 }
 public interface IWorldRule {
     string Id { get; }
@@ -168,6 +184,13 @@ public sealed class Simulation {
             throw new ArgumentException("Rule IDs must be nonempty and unique.");
         this.rules = array;
     }
+    // 总纲 §2.1 独立子种子：Mix(a,b)=a^b 后再走一次 Next；只读局部 state，绝不读写主 RandomState。
+    public static (ulong CreatureSeed, ulong NestSeed) DeriveSubseeds(ulong seed) {
+        var creatureState = Mix(seed, 0x9E3779B97F4A7C15UL);
+        var nestState = Mix(seed, 0xC2B2AE3D27D4EB4FUL);
+        return (RandomSource.Next(ref creatureState), RandomSource.Next(ref nestState));
+    }
+    private static ulong Mix(ulong a, ulong b) { var state = a ^ b; return RandomSource.Next(ref state); }
     public WorldState Step(WorldState world) {
         if (world.IsDefeated) return world;
         var next = world with { Tick = checked(world.Tick + 1) };
@@ -183,7 +206,11 @@ public sealed class Simulation {
                     Memory: Enumerable.Repeat(0, 16).ToImmutableArray(),
                     RecentDecisions: ImmutableArray<AntDecisionLogEntry>.Empty) { Health = type.MaxHealth, MaxHealth = type.MaxHealth }))
             .Select((ant, index) => ant with { Id = index + 1 }).ToImmutableArray();
+        var (creatureSeed, nestSeed) = DeriveSubseeds(rng);
         var world = new WorldState(0, rng, config, ants, [], config.InitialStock) {
+            CreatureSeed = creatureSeed, NestSeed = nestSeed,
+            Nest = NestLayout.Default, Institution = config.Institutions.Initial(0),
+            BlockedCells = [], ObservedChambers = [NestLayout.CoreIndex],
             DeliveredBySpecies = config.AntTypes.ToImmutableDictionary(x => x.Id, _ => 0L, StringComparer.Ordinal),
             ActiveProgramVersions = config.AntTypes.ToImmutableDictionary(x => x.Id, _ => 0, StringComparer.Ordinal)
             };

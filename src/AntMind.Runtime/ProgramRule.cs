@@ -92,7 +92,9 @@ public sealed class ProgramRule : IWorldRule {
                 NearbyAllies=world.Ants.Where(a=>a.Id!=ant.Id && CombatMath.Distance(a.Position,ant.Position)<=species.VisionCells*Point.UnitsPerCell)
                     .Select(a=>new AllyView(a.Id,a.Species,a.GroupId,a.Position,a.Health,a.MaxHealth)).ToImmutableArray(),
                 NearbyClaims=world.Claims.Where(c=>c.ExpiresTick>world.Tick && nearby.Any(f=>f.Id==c.FoodId)).ToImmutableArray(),
-                NearbyEnemies=world.Enemies.Where(e=>CombatMath.Distance(e.Position,ant.Position)<=species.VisionCells*Point.UnitsPerCell).ToImmutableArray()
+                NearbyEnemies=world.Enemies.Where(e=>CombatMath.Distance(e.Position,ant.Position)<=species.VisionCells*Point.UnitsPerCell).ToImmutableArray(),
+                InstitutionVersion = world.Institution.Version,
+                InstitutionTierCodes = world.Institution.Fields.TierCodes
             };
     }
 

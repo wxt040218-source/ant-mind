@@ -70,6 +70,6 @@ internal static class OutpostCheck {
         void Strip(JsonNode? n) {if(n is JsonObject o){o.Remove("EatHolderId");o.Remove("CanFeedAnts");foreach(var child in o.ToArray())Strip(child.Value);}else if(n is JsonArray a)foreach(var child in a)Strip(child);}
         Strip(node);File.WriteAllText(path,node.ToJsonString());var oldBytes=File.ReadAllBytes(path);var migrated=SavedGames.Read(directory,"legacy");
         var legacyDone=eat.Apply(migrated.World with {Tick=41});
-        check(migrated.Format==5 && migrated.Protocol==Protocol.Version && migrated.World.Config.Production.Buildings.Single(b=>b.Id=="cache").CanFeedAnts && migrated.World.Ants[0].EatHolderId==-1 && legacyDone.Ants[0].Health==8 && oldBytes.SequenceEqual(File.ReadAllBytes(path)),"wire17 saves without new fields gain outpost service while preserving old meals and original files");
+        check(migrated.Format==SavedGames.Format && migrated.Protocol==Protocol.Version && migrated.World.Config.Production.Buildings.Single(b=>b.Id=="cache").CanFeedAnts && migrated.World.Ants[0].EatHolderId==-1 && legacyDone.Ants[0].Health==8 && oldBytes.SequenceEqual(File.ReadAllBytes(path)),"wire17 saves without new fields gain outpost service while preserving old meals and original files");
     }
 }

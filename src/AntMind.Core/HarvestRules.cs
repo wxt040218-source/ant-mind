@@ -69,7 +69,9 @@ public sealed class InteractionRule : IWorldRule {
         var bySpecies = world.DeliveredBySpecies.ToBuilder();
         var nextId = world.NextResourceId;
         var nest = Point.FromCells(world.Config.Width/2, world.Config.Height/2);
-        for (var i = 0; i < ants.Count; i++) {
+        var order = InstitutionMechanics.InteractionIndices(world, world.Ants);
+        for (var step = 0; step < order.Length; step++) {
+            var i = order[step];
             var ant = ants[i];
             if (ant.Intent is not (AntAction.Pickup or AntAction.Deliver or AntAction.Drop)) continue;
             var result = "invalid_interaction";

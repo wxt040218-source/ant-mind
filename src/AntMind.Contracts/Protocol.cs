@@ -116,6 +116,13 @@ public sealed record EnemyView(int Id, Point Position, int Health, int MaxHealth
     public int LastKnownHealth { get; init; }
     public long LastSeenTick { get; init; } = -1;
     public ImmutableDictionary<string, string> Properties { get; init; } = ImmutableDictionary<string, string>.Empty;
+    [System.Text.Json.Serialization.JsonPropertyName("creature_kind")] public string CreatureKind { get; init; } = "predator_beetle";
+    [System.Text.Json.Serialization.JsonPropertyName("carcass_food_type")] public string CarcassFoodType { get; init; } = "meat";
+    [System.Text.Json.Serialization.JsonPropertyName("block_cells")] public int BlockCells { get; init; } = 0;
+    [System.Text.Json.Serialization.JsonPropertyName("herd_id")] public int HerdId { get; init; } = 0;
+    [System.Text.Json.Serialization.JsonPropertyName("last_graze_tick")] public long LastGrazeTick { get; init; } = -1000000;
+    [System.Text.Json.Serialization.JsonPropertyName("target_chamber_x")] public int TargetChamberX { get; init; } = -1;
+    [System.Text.Json.Serialization.JsonPropertyName("target_chamber_y")] public int TargetChamberY { get; init; } = -1;
 }
 public sealed record AntSpeciesSnapshot(string Id, string Name, int EmptyMoveUnitsPerTick,
     int LoadedMoveUnitsPerTick, int CarryCapacity, int VisionCells, int Count, long Delivered) {
@@ -134,7 +141,7 @@ public sealed record SpeciesProgramSnapshot(string Species, int ActiveVersion, i
     public int GroupId { get; init; }
 }
 public enum Visibility { Discovered, Full }
-public enum CommandKind { Pause, Resume, Step, Speed, Visibility, Recruit, UpgradeBrain, ApplyProgram, RollbackProgram, SetQueenRange, SetMinimumReserve, SetPopulationCap, ProduceEgg, HatchEgg, UpgradeCarry, UpgradeNetwork, CreateGroup, UpdateGroup, DeleteGroup, AssignAnt, ClearGroupProgram, AssignAnts, SetGroupParameter, RemoveGroupParameter, SetGroupPoint, RemoveGroupPoint, PlanBuild, CancelBuild, SaveGame, LoadGame, ConfigureGroup }
+public enum CommandKind { Pause, Resume, Step, Speed, Visibility, Recruit, UpgradeBrain, ApplyProgram, RollbackProgram, SetQueenRange, SetMinimumReserve, SetPopulationCap, ProduceEgg, HatchEgg, UpgradeCarry, UpgradeNetwork, CreateGroup, UpdateGroup, DeleteGroup, AssignAnt, ClearGroupProgram, AssignAnts, SetGroupParameter, RemoveGroupParameter, SetGroupPoint, RemoveGroupPoint, PlanBuild, CancelBuild, SaveGame, LoadGame, ConfigureGroup, SetInstitution, RollbackInstitution, PlanChamber, DigChamber, UpgradeChamber, CancelChamber }
 public sealed record GameCommand(Guid RequestId, long ExpectedRevision, CommandKind Kind, int Value = 0,
     string Reason = "", string Species = AntSpeciesIds.Scout, string ProgramSource = "") {
     public GroupConfiguration? GroupConfiguration {get;init;}
@@ -152,6 +159,12 @@ public sealed record GameCommand(Guid RequestId, long ExpectedRevision, CommandK
     public Point? Rally { get; init; }
     public Point? Objective { get; init; }
     public Point? Retreat { get; init; }
+    [System.Text.Json.Serialization.JsonPropertyName("institution_field")] public string InstitutionField { get; init; } = "";
+    [System.Text.Json.Serialization.JsonPropertyName("institution_tier")] public string InstitutionTier { get; init; } = "";
+    [System.Text.Json.Serialization.JsonPropertyName("target_institution_version")] public int TargetInstitutionVersion { get; init; }
+    [System.Text.Json.Serialization.JsonPropertyName("chamber_x")] public int ChamberX { get; init; }
+    [System.Text.Json.Serialization.JsonPropertyName("chamber_y")] public int ChamberY { get; init; }
+    [System.Text.Json.Serialization.JsonPropertyName("chamber_type")] public string ChamberType { get; init; } = "";
 }
 public sealed record CommandResult(Guid RequestId, bool Accepted, string Code, long Revision, string? Detail = null);
 public sealed record Snapshot(int SchemaVersion, long Revision, long Tick, bool Paused, int Speed,
@@ -209,6 +222,15 @@ public sealed record Snapshot(int SchemaVersion, long Revision, long Tick, bool 
     public int InstructionBudget { get; init; }
     public int DecisionInterval { get; init; }
     public int NextUpgradeCost { get; init; }
+    [System.Text.Json.Serialization.JsonPropertyName("institution_version")] public int InstitutionVersion { get; init; } = 1;
+    [System.Text.Json.Serialization.JsonPropertyName("institution_applied_tick")] public long InstitutionAppliedTick { get; init; }
+    [System.Text.Json.Serialization.JsonPropertyName("institution_reason")] public string InstitutionReason { get; init; } = "";
+    [System.Text.Json.Serialization.JsonPropertyName("institution_history_count")] public int InstitutionHistoryCount { get; init; }
+    [System.Text.Json.Serialization.JsonPropertyName("reserve_policy")] public string ReservePolicy { get; init; } = "balanced";
+    [System.Text.Json.Serialization.JsonPropertyName("ration_policy")] public string RationPolicy { get; init; } = "weakest_first";
+    [System.Text.Json.Serialization.JsonPropertyName("labor_policy")] public string LaborPolicy { get; init; } = "balanced";
+    [System.Text.Json.Serialization.JsonPropertyName("defense_policy")] public string DefensePolicy { get; init; } = "measured";
+    [System.Text.Json.Serialization.JsonPropertyName("admission_policy")] public string AdmissionPolicy { get; init; } = "fresh_first";
 
 }
 public sealed record TechnologyEra(int Level,string Name,string Description);
@@ -223,7 +245,7 @@ public sealed record ObjectSnapshot(string Kind, int Id, AntView? Ant = null, Re
 public sealed record WireRequest(int ProtocolVersion, string Method, GameCommand? Command = null,
     string? ObjectKind = null, int ObjectId = 0, AgentPresence? Agent = null, EvaluationRequest? Evaluation = null, WatchRequest? Watch=null, EventReadRequest? Events=null, PreviewRequest? Preview=null);
 public sealed record WireResponse(int ProtocolVersion, Snapshot? Snapshot = null, CommandResult? Result = null, string? Error = null, ObjectSnapshot? Object = null, ImmutableArray<SaveMetadata>? Saves = null, EvaluationReport? Evaluation = null, WatchResult? Watches=null, AgentEventPage? Events=null, AgentSummary? Summary=null, ProgramPreview? Preview=null, ProgramBatchPreview? PreviewBatch=null);
-public static class Protocol { public const int Version = 18; public const int MaxBytes = 1_048_576; }
+public static class Protocol { public const int Version = 19; public const int MaxBytes = 1_048_576; }
 
 public sealed record SaveMetadata(string Slot,long Bytes,DateTime ModifiedUtc);
 

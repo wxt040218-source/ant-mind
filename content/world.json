@@ -1,5 +1,5 @@
 {
-  "schemaVersion": 15,
+  "schemaVersion": 16,
   "id": "antmind.world.default",
   "world": {
     "width": 128,
@@ -324,6 +324,41 @@
         150
       ],
       "workUnitsPerExperience": 10
+    },
+    "institutions": {
+      "reserve_policy": "balanced",
+      "ration_policy": "weakest_first",
+      "labor_policy": "balanced",
+      "defense_policy": "measured",
+      "admission_policy": "fresh_first"
+    },
+    "creatures": {
+      "creature_seed_derivation": "colony-era-contract-2.1",
+      "spawn_interval_ticks": 1200,
+      "enemy_cap": 3,
+      "migration_interval_ticks": 2400,
+      "herd_size": 3,
+      "herd_cap": 9,
+      "graze_interval_ticks": 600,
+      "graze_quantity": 1,
+      "blocked_cell_speed_basis": 50,
+      "kinds": ["predator_beetle", "pantry_moth", "road_blocker", "aphid", "migration_swarm"],
+      "kind_parameters": [
+        {"kind": "predator_beetle", "health": 18, "damage": 2, "speed": 70, "vision": 8, "carcass_food_type": "meat", "corpse_min": 1, "corpse_max": 3},
+        {"kind": "pantry_moth", "health": 12, "damage": 0, "speed": 70, "vision": 0, "carcass_food_type": "fiber", "corpse_min": 1, "corpse_max": 2},
+        {"kind": "road_blocker", "health": 24, "damage": 0, "speed": 0, "vision": 0, "carcass_food_type": "fiber", "corpse_min": 1, "corpse_max": 3},
+        {"kind": "aphid", "health": 8, "damage": 0, "speed": 0, "vision": 0, "carcass_food_type": "meat", "corpse_min": 1, "corpse_max": 1},
+        {"kind": "migration_swarm", "health": 18, "damage": 2, "speed": 70, "vision": 8, "carcass_food_type": "meat", "corpse_min": 1, "corpse_max": 3}
+      ],
+      "default_kind": "predator_beetle",
+      "default_carcass_food_type": "meat"
+    },
+    "nestLayout": {
+      "grid_width": 9,
+      "grid_height": 9,
+      "core_x": 4,
+      "core_y": 4,
+      "max_level": 3
     }
   }
 }

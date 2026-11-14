@@ -498,6 +498,7 @@ await ColonyCheck.Run(Check);
 MapPresentationCheck.Run(Check);
 MilestoneCheck.Run(Check);
 BehaviorProgramCheck.Run(Check);
+await InstitutionCheck.Run(Check);
 await McpCheck.RunAsync();
 Console.WriteLine($"All {checks} architectural checks passed.");
 sealed class ExampleRule : IWorldRule {

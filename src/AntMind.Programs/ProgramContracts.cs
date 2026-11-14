@@ -34,6 +34,9 @@ public sealed record Perception(int AntId, long Tick, Point Position, Point Nest
     public ImmutableArray<AllyView> NearbyAllies { get; init; } = [];
     public ImmutableArray<ResourceClaim> NearbyClaims { get; init; } = [];
     public ImmutableArray<ResourceClaim> QueenClaims { get; init; } = [];
+    // 只读制度投影：版本 + 五字段档位码（顺序与 InstitutionCatalog.Fields 一致），不含 History/全图。
+    public int InstitutionVersion { get; init; } = 1;
+    public ImmutableArray<int> InstitutionTierCodes { get; init; } = [];
 }
 public sealed record Decision(string Branch, int Spent, Point? Target, AntAction Action,
     ImmutableArray<int> Memory = default, string? Error = null,
@@ -49,6 +52,9 @@ public sealed record Decision(string Branch, int Spent, Point? Target, AntAction
     public int ClaimDuration { get; init; }
     public bool ReleaseClaim { get; init; }
     public int AttackTargetId { get; init; }
+    // DSL set_institution 的只读意图，不写全局状态；唯一全局写入口是 Runtime actor 命令。
+    public string InstitutionField { get; init; } = "";
+    public string InstitutionTier { get; init; } = "";
 }
 public interface IAntProgram { Decision Execute(Perception perception, InstructionBudget budget); }
 public sealed class InstructionBudget(int limit) {

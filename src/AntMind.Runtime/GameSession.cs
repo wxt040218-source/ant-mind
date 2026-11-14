@@ -79,6 +79,9 @@ public sealed partial class GameSession : IAsyncDisposable {
         if(command.ExpectedRevision==revision && !world.IsDefeated && command.Kind is CommandKind.ConfigureGroup or CommandKind.CreateGroup or CommandKind.UpdateGroup or CommandKind.DeleteGroup or CommandKind.AssignAnt or CommandKind.AssignAnts or CommandKind.SetGroupParameter or CommandKind.RemoveGroupParameter or CommandKind.SetGroupPoint or CommandKind.RemoveGroupPoint) {
             result=ApplyGroupCommand(command); receipts.Add(command.RequestId,(command,result));return result;
         }
+        if(command.ExpectedRevision==revision && !world.IsDefeated && command.Kind is CommandKind.SetInstitution or CommandKind.RollbackInstitution) {
+            result=ApplyInstitutionCommand(command); receipts.Add(command.RequestId,(command,result));return result;
+        }
         if (command.ExpectedRevision != revision) result = Reject("revision_conflict");
         else if (world.IsDefeated && command.Kind is not (CommandKind.Pause or CommandKind.Speed or CommandKind.ApplyProgram or CommandKind.RollbackProgram)) result = Reject("colony_defeated");
         else if (!Enum.IsDefined(command.Kind) ||
@@ -106,16 +109,16 @@ public sealed partial class GameSession : IAsyncDisposable {
         else if (command.Kind == CommandKind.HatchEgg && world.Eggs < 1) result = Reject("no_eggs");
         else if (command.Kind == CommandKind.ProduceEgg && world.EggsProduced == int.MaxValue) result = Reject("egg_capacity");
         else if (command.Kind == CommandKind.ProduceEgg &&
-            world.DevelopmentValue - world.Config.RecruitmentCost < world.Config.MinimumReserve) result = Reject("insufficient_stock");
+            world.DevelopmentValue - world.Config.RecruitmentCost < EffectiveMinimumReserve) result = Reject("insufficient_stock");
         else if (command.Kind == CommandKind.UpgradeCarry && command.Species != AntSpeciesIds.Hauler) result = Reject("carry_upgrade_species");
         else if (command.Kind == CommandKind.UpgradeCarry && world.HaulerCarryLevel >= world.Config.CarryMultipliers.Length) result = Reject("max_carry_level");
-        else if (command.Kind == CommandKind.UpgradeCarry && world.DevelopmentValue - world.Config.CarryUpgradeCosts[world.HaulerCarryLevel] < world.Config.MinimumReserve) result = Reject("insufficient_stock");
+        else if (command.Kind == CommandKind.UpgradeCarry && world.DevelopmentValue - world.Config.CarryUpgradeCosts[world.HaulerCarryLevel] < EffectiveMinimumReserve) result = Reject("insufficient_stock");
         else if (command.Kind == CommandKind.UpgradeNetwork && world.NetworkLevel >= world.Config.NetworkRanges.Length) result = Reject("max_network_level");
-        else if (command.Kind == CommandKind.UpgradeNetwork && world.DevelopmentValue - world.Config.NetworkUpgradeCosts[world.NetworkLevel] < world.Config.MinimumReserve) result = Reject("insufficient_stock");
+        else if (command.Kind == CommandKind.UpgradeNetwork && world.DevelopmentValue - world.Config.NetworkUpgradeCosts[world.NetworkLevel] < EffectiveMinimumReserve) result = Reject("insufficient_stock");
         else if (command.Kind == CommandKind.UpgradeBrain && world.BrainLevel >= world.Config.BrainBudgets.Length)
             result = Reject("max_brain_level");
         else if (command.Kind == CommandKind.UpgradeBrain &&
-            world.DevelopmentValue - world.Config.BrainCosts[world.BrainLevel] < world.Config.MinimumReserve)
+            world.DevelopmentValue - world.Config.BrainCosts[world.BrainLevel] < EffectiveMinimumReserve)
             result = Reject("insufficient_stock");
         else {
             switch(command.Kind) {
@@ -125,7 +128,10 @@ public sealed partial class GameSession : IAsyncDisposable {
                     world = world with { NetworkLevel = world.NetworkLevel + 1,
                         NetworkUpgradeSpent = checked(world.NetworkUpgradeSpent + networkCost) };
                     break;
-                case CommandKind.SetMinimumReserve: world = world with { Config = world.Config with { MinimumReserve = command.Value } }; break;
+                case CommandKind.SetMinimumReserve:
+                    world = world with { Config = world.Config with { MinimumReserve = command.Value } };
+                    world = world with { ActiveParameters = InstitutionMechanics.Resolve(world) };
+                    break;
                 case CommandKind.SetPopulationCap: world = world with { Config = world.Config with { PopulationCap = command.Value } }; break;
                 case CommandKind.Pause: paused = true; break;
                 case CommandKind.Resume: paused = false; break;
@@ -168,6 +174,7 @@ public sealed partial class GameSession : IAsyncDisposable {
     }
     private void Advance() {
         world=GameRules.Activate(world,programCatalog);
+        world = world with { ActiveParameters = InstitutionMechanics.Resolve(world) };
         world = simulation.Step(world); revision++;
         if (world.IsDefeated) paused = true;
         eventJournal.Observe(AgentFrame());
@@ -225,7 +232,7 @@ public sealed partial class GameSession : IAsyncDisposable {
                 RecruitmentCost = world.Config.RecruitmentCost,
                 InstructionBudget = world.Config.BrainBudgets[world.BrainLevel - 1],
                 DecisionInterval = world.Config.BrainIntervals[world.BrainLevel - 1],
-                NextUpgradeCost = world.BrainLevel < 5 ? world.Config.BrainCosts[world.BrainLevel] : 0
+                NextUpgradeCost = world.BrainLevel < 5 ? world.Config.BrainCosts[world.BrainLevel] : 0, InstitutionVersion = world.Institution.Version, InstitutionAppliedTick = world.Institution.AppliedTick, InstitutionReason = world.Institution.Reason, InstitutionHistoryCount = world.Institution.History.Length, ReservePolicy = world.Institution.ReservePolicy, RationPolicy = world.Institution.RationPolicy, LaborPolicy = world.Institution.LaborPolicy, DefensePolicy = world.Institution.DefensePolicy, AdmissionPolicy = world.Institution.AdmissionPolicy
             };
     }
     public async ValueTask DisposeAsync() { queue.Writer.TryComplete(); await actor; }

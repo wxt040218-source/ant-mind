@@ -9,7 +9,7 @@ public sealed record SavedProgramVersion(int Version,string Reason,string Source
 public sealed record SavedGame(int Format,int Protocol,WorldState World,ImmutableArray<SavedProgram> Programs,int Speed=1);
 public sealed record SaveInfo(string Slot,long Bytes,DateTime ModifiedUtc);
 public static class SavedGames {
-    public const int Format=5;
+    public const int Format=6;
     private const int MaxBytes=32*1024*1024;
     private static readonly JsonSerializerOptions Json=new() {IgnoreReadOnlyProperties=true,MaxDepth=64,UnmappedMemberHandling=System.Text.Json.Serialization.JsonUnmappedMemberHandling.Disallow};
     public static string DefaultDirectory=>Path.Combine(AppContext.BaseDirectory,"saves");
@@ -51,7 +51,16 @@ public static class SavedGames {
             if(o is SourceView s && (s.Amount<0 || s.Amount>s.Capacity || s.Capacity<1 || s.GrowthTicks<0 || !w.Config.Foods.Any(x=>x.Id==s.ItemType)))throw new InvalidDataException("Invalid source.");
             if(o is BuildingView materialSite && materialSite.ConstructionItem.Length>0 && !w.Config.Foods.Any(x=>x.Id==materialSite.ConstructionItem && !x.Edible))throw new InvalidDataException("Invalid construction material.");
             if(o is BuildingView b) {ValidateStore(b.Store,w.Config);ValidateStore(b.Output,w.Config);ValidateStore(b.WorkInProgress,w.Config);if(b.Phase is not ("blueprint" or "ready" or "cancelled") || b.ConstructionWork<0 || b.RecipeWork<0 || b.Recipe.Length>0 && !w.Config.Production.Recipes.Any(x=>x.Id==b.Recipe) || !w.Config.Production.Buildings.Any(x=>x.Id==b.Type))throw new InvalidDataException("Invalid building.");}
+            if(o is EnemyView e && (!w.Config.Creatures.Kinds.Contains(e.CreatureKind) ||
+                !w.Config.Foods.Any(f=>f.Id==e.CarcassFoodType) || e.BlockCells<0 || e.HerdId<0 ||
+                e.LastGrazeTick>w.Tick || e.TargetChamberX is < -1 or >= NestLayout.GridWidth ||
+                e.TargetChamberY is < -1 or >= NestLayout.GridHeight))throw new InvalidDataException("Invalid creature kind.");
         }
+        try {w.Institution.Validate();w.Nest.Validate();}catch(ArgumentException){throw new InvalidDataException("Invalid colony era state.");}
+        if(w.CreatureSeed==0 || w.NestSeed==0 || w.Institution.AppliedTick>w.Tick ||
+            w.BlockedCells.IsDefault || w.BlockedCells.Any(c=>c<0 || c>=w.Config.Width*w.Config.Height) ||
+            w.ObservedChambers.IsDefault || w.ObservedChambers.Any(c=>c<0 || c>=NestLayout.GridWidth*NestLayout.GridHeight))
+            throw new InvalidDataException("Invalid colony era state.");
         ValidateStore(w.Stock,w.Config);
         if(w.NextResourceId<=w.Objects.All<ResourceView>().Select(x=>x.Id).DefaultIfEmpty(0).Max() || w.NextEnemyId<=w.Objects.All<EnemyView>().Select(x=>x.Id).DefaultIfEmpty(0).Max() || w.NextBuildingId<=w.Objects.All<BuildingView>().Select(x=>x.Id).DefaultIfEmpty(0).Max())throw new InvalidDataException("Invalid next identity.");
         if(!save.Programs.Select(x=>x.Species).Order().SequenceEqual(w.Config.AntTypes.Select(x=>x.Id).Order()))throw new InvalidDataException("Program registry mismatch.");

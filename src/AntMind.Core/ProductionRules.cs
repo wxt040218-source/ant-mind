@@ -123,7 +123,7 @@ public sealed class SourceGrowthRule : IWorldRule {
 public sealed class ProductionActionRule : IWorldRule {
     public string Id=>"core.production-actions";public int Order=>30;
     public WorldState Apply(WorldState w) {
-        foreach(var original in w.Ants.Where(a=>a.Intent is AntAction.Harvest or AntAction.Deposit or AntAction.Withdraw or AntAction.Transfer or AntAction.Process)) {
+        foreach(var original in InstitutionMechanics.ProductionOrder(w, w.Ants.Where(a=>a.Intent is AntAction.Harvest or AntAction.Deposit or AntAction.Withdraw or AntAction.Transfer or AntAction.Process))) {
             var a=original;var args=a.Production;var error="";var qty=0;
             var type=args.ItemType;
             var building=w.Objects.Find("building",args.ObjectId) as BuildingView;
@@ -187,7 +187,7 @@ public sealed class ProductionActionRule : IWorldRule {
                     } else if(a.Carry>0 && a.CarryFood!=type)error="mixed_cargo";
                     else {
                         qty=(int)Math.Min(args.Quantity,Math.Min(store.Get(type),w.CarryCapacity(a.Species)-a.Carry));
-                        if(isNest && w.Config.Foods.Any(x=>x.Id==type && x.Edible))qty=(int)Math.Min(qty,Math.Max(0,w.DevelopmentValue-w.Config.MinimumReserve)/w.Config.Foods.Single(x=>x.Id==type).Value);
+                        if(isNest && w.Config.Foods.Any(x=>x.Id==type && x.Edible))qty=(int)Math.Min(qty,Math.Max(0,w.DevelopmentValue-InstitutionMechanics.EffectiveReserve(w))/w.Config.Foods.Single(x=>x.Id==type).Value);
                         if(qty<=0)error="no_items_or_capacity";
                         else {var batch=store.Take(type,qty);store=batch.Store;a=a with {Carry=a.Carry+qty,CarryFood=type,CargoCredits=ItemCredit.Merge(Economy.Credits(a),batch.Credits),CargoTracked=true};}
                     }
@@ -216,7 +216,7 @@ public sealed class WorkRule : IWorldRule {
                 b.Phase=="cancelled" || b.Phase=="ready" && b.Recipe.Length==0?"no_work":
                 !occupied.Add(b.Id)?"worker_slot_busy":null;
             if(error is null) {
-                var workValue=checked(w.Config.AntType(a.Species).WorkRate*w.Config.Veterancy.WorkPercent[a.Level-1]+a.WorkRateRemainder);
+                var workValue=checked(w.Config.AntType(a.Species).WorkRate*w.Config.Veterancy.WorkPercent[a.Level-1]*InstitutionMechanics.LaborWeight(w,a.Species)/100+a.WorkRateRemainder);
                 var rate=workValue/100;
                 a=a with {WorkRateRemainder=workValue%100};
                 var remainingWork=b!.Phase=="blueprint"?def!.BuildTicks-b.ConstructionWork:w.Config.Production.Recipes.Single(r=>r.Id==b.Recipe).WorkTicks-b.RecipeWork;

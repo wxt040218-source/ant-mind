@@ -32,7 +32,7 @@ internal static class McpCheck {
             await Rpc(1, "initialize", new { protocolVersion = "2025-06-18", capabilities = new { }, clientInfo = new { name = "antmind-checks", version = "1" } });
             await mcp.StandardInput.WriteLineAsync(JsonSerializer.Serialize(new { jsonrpc = "2.0", method = "notifications/initialized" }));
             var tools = await Rpc(2, "tools/list", new { });
-            if (tools.GetProperty("tools").GetArrayLength() != 15) throw new Exception("Unexpected tool schema.");
+            if (tools.GetProperty("tools").GetArrayLength() != 16) throw new Exception("Unexpected tool schema.");
             var handshakeView = await new PipeClient(pipeName).SendAsync(new(Protocol.Version, "observe"));
             if (handshakeView.Snapshot?.AgentConnected != true) throw new Exception("Completed MCP initialize handshake did not light the indicator.");
             var catalog=await Rpc(98,"tools/call",new {name="get_catalog",arguments=new {}});

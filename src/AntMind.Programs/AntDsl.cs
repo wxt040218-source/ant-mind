@@ -72,6 +72,8 @@ internal sealed class DslExecution {
     public int AttackTargetId { get; private set; }
     public bool RequestQueenInfo { get; private set; }
     public bool ReportDiscovery { get; private set; }
+    public string InstitutionField { get; private set; } = "";
+    public string InstitutionTier { get; private set; } = "";
     public Point? Target { get; private set; }
     public AntAction Action { get; private set; }
     public string Branch { get; private set; } = "dsl-idle";
@@ -173,6 +175,8 @@ internal sealed class DslExecution {
             "queen_y" => NearestResource(true)?.Position.Y ?? 0,
             "explore_x" => ExploreTarget().X,
             "explore_y" => ExploreTarget().Y,
+            "institution_version" => perception.InstitutionVersion,
+            _ when InstitutionCatalog.TryBuiltinCode(name, out var builtinCode) => builtinCode,
             _ when variables.TryGetValue(name, out var value) => value,
             _ => throw new DslRuntimeException($"Unknown variable '{name}'.")
         };
@@ -262,12 +266,17 @@ internal sealed class DslExecution {
             "ally_x" => AllyAt(values[0])?.Position.X??0,
             "ally_y" => AllyAt(values[0])?.Position.Y??0,
             "ally_health" => AllyAt(values[0])?.Health??0,
+            "institution" when values.Length == 1 => CurrentInstitutionTierCode(values[0]),
             "stock" => (int)Math.Min(int.MaxValue,perception.NestStock.GetValueOrDefault(FoodName(values[0]))),
             _ => throw new DslRuntimeException($"Invalid function or argument count '{name}'.")
         };
     }
 
     private int RecipeUnlocked(int code) {foreach(var r in perception.Recipes){Spend();if(r.Code==code)return perception.TechnologyLevel>=r.RequiredNetworkLevel?1:0;}return 0;}
+    // institution(fieldCode) 返回该字段当前档位的全局整数码，供 DSL 与 Builtin 常量比较；纯读感知投影。
+    private int CurrentInstitutionTierCode(int fieldCode) =>
+        fieldCode is < 1 or > 5 || perception.InstitutionTierCodes.IsDefault || perception.InstitutionTierCodes.Length != 5
+            ? 0 : perception.InstitutionTierCodes[fieldCode - 1];
     private int SourceIndex(int index,bool queen) {Spend();var list=queen?perception.QueenSources:perception.Sources;return index>=0 && index<list.Length?list[index].Id:0;}
     private int BuildingIndex(int index,bool queen) {Spend();var list=queen?perception.QueenBuildings:perception.Buildings;return index>=0 && index<list.Length?list[index].Id:0;}
     public void ActionStatement(string name, int[] values) {
@@ -308,6 +317,10 @@ internal sealed class DslExecution {
                 RequestQueenInfo = true; Branch = "request_queen_info"; break;
             case "report_discovery" when values.Length == 0:
                 ReportDiscovery = true; Branch = "report_discovery"; break;
+            case "set_institution" when values.Length == 2:
+                InstitutionField = InstitutionCatalog.FieldName(values[0]);
+                InstitutionTier = InstitutionCatalog.TierName(values[1]);
+                Branch = "set_institution"; break;
             case "wait" when values.Length == 0:
                 Target = null;
                 Action = AntAction.Wait;
@@ -323,7 +336,8 @@ internal sealed class DslExecution {
     public Decision Decision(string branch, string? error = null) => new(branch == "dsl-complete" && Branch != "dsl-idle"
             ? Branch : branch,
         budget.Initial - budget.Remaining, Target, Action, memory.ToImmutable(), error, RequestQueenInfo, ReportDiscovery) { Production=Production,AttackTargetId = AttackTargetId, PickupFoodId=PickupFoodId, EatFood=EatFood,FollowAntId=FollowAntId,FollowDistance=FollowDistance,
-            ClaimFoodId=ClaimFoodId,ClaimQuantity=ClaimQuantity,ClaimDuration=ClaimDuration,ReleaseClaim=ReleaseClaim,EatHolderId=EatHolderId };
+            ClaimFoodId=ClaimFoodId,ClaimQuantity=ClaimQuantity,ClaimDuration=ClaimDuration,ReleaseClaim=ReleaseClaim,EatHolderId=EatHolderId,
+            InstitutionField=InstitutionField,InstitutionTier=InstitutionTier };
 
     private int FoodCode(string id) {
         for(int i=0;i<perception.FoodDefinitions.Length;i++) if(perception.FoodDefinitions[i].Id==id) return i+1;
@@ -507,10 +521,14 @@ internal sealed class AntDslParser {
         "carry", "capacity", "species_scout", "species_hauler", "nearest_amount", "nearest_x", "nearest_y",
         "at_nest", "nearest_distance", "action_status", "queen_info_tick", "queen_request_status", "queen_report_status", "explore_x", "explore_y", "queen_connected", "queen_count", "queen_amount", "queen_x", "queen_y"
     };
-    private static readonly HashSet<string> ExpressionFunctions = new(StringComparer.Ordinal) { "recipe_ready","recipe_unlocked","food_value","source_id_at", "queen_source_id_at", "building_id_at", "queen_building_id_at", "source_x", "source_y", "source_amount", "source_type", "queen_source_x", "queen_source_y", "queen_source_amount", "queen_source_type", "building_x", "building_y", "building_ready", "building_busy", "building_can_feed", "building_phase", "building_material", "building_cost", "building_work", "recipe_work", "holder_stock", "holder_output", "abs", "min", "max", "queen_x_at", "queen_y_at", "queen_amount_at", "queen_food_type_at", "claimed_amount", "ally_x", "ally_y", "ally_health", "stock" };
+    private static readonly HashSet<string> ExpressionFunctions = new(StringComparer.Ordinal) { "recipe_ready","recipe_unlocked","food_value","source_id_at", "queen_source_id_at", "building_id_at", "queen_building_id_at", "source_x", "source_y", "source_amount", "source_type", "queen_source_x", "queen_source_y", "queen_source_amount", "queen_source_type", "building_x", "building_y", "building_ready", "building_busy", "building_can_feed", "building_phase", "building_material", "building_cost", "building_work", "recipe_work", "holder_stock", "holder_output", "abs", "min", "max", "queen_x_at", "queen_y_at", "queen_amount_at", "queen_food_type_at", "claimed_amount", "ally_x", "ally_y", "ally_health", "stock", "institution" };
     private static readonly HashSet<string> Actions = new(StringComparer.Ordinal) {
-        "harvest","deposit","withdraw","transfer","work","process", "pickup_from", "eat", "eat_from", "follow", "claim_food", "release_claim", "attack", "set_target", "move_to", "pickup", "deliver", "wait", "drop", "request_queen_info", "report_discovery"
+        "harvest","deposit","withdraw","transfer","work","process", "pickup_from", "eat", "eat_from", "follow", "claim_food", "release_claim", "attack", "set_target", "move_to", "pickup", "deliver", "wait", "drop", "request_queen_info", "report_discovery", "set_institution"
     };
+    static AntDslParser() {
+        Builtins.Add("institution_version");
+        foreach (var name in InstitutionCatalog.BuiltinNames) Builtins.Add(name);
+    }
     private readonly List<DslToken> tokens;
     private readonly HashSet<string> locals = new(StringComparer.Ordinal);
     private int position;
@@ -556,9 +574,24 @@ internal sealed class AntDslParser {
             return Node(new DslAssign(identifier.Text, value));
         }
         if (!Actions.Contains(identifier.Text)) ErrorAt(identifier, $"Unknown action '{identifier.Text}'.");
+        if (identifier.Text == "set_institution") {
+            Expect("(");
+            var literals = new List<DslToken>();
+            if (!Is(")")) { do { literals.Add(Expect(DslTokenKind.String, "Expected a quoted institution literal.")); } while (Match(",")); }
+            Expect(")");
+            if (literals.Count != 2) ErrorAt(identifier, "Action 'set_institution' expects 2 argument(s).");
+            var fieldToken = literals[0];
+            var tierToken = literals[1];
+            if (!InstitutionCatalog.IsField(fieldToken.Text)) ErrorAt(fieldToken, $"Invalid institution field '{fieldToken.Text}'.");
+            if (!InstitutionCatalog.IsTier(fieldToken.Text, tierToken.Text)) ErrorAt(tierToken, $"Invalid institution tier '{tierToken.Text}' for '{fieldToken.Text}'.");
+            Expect(";");
+            return Node(new DslAction(identifier.Text, [
+                new DslNumber(InstitutionCatalog.FieldCode(fieldToken.Text)),
+                new DslNumber(InstitutionCatalog.TierCode(fieldToken.Text, tierToken.Text))]));
+        }
         var arguments = ParseArguments(); Expect(";");
         var expected = identifier.Text switch {
-            "harvest" or "process" or "set_target" or "move_to" or "follow" or "eat_from" => 2,
+            "harvest" or "process" or "set_target" or "move_to" or "follow" or "eat_from" or "set_institution" => 2,
             "deposit" or "withdraw" or "transfer" or "claim_food" => 3,
             "work" or "eat" or "pickup_from" => 1,
             "release_claim" => 0,
@@ -641,11 +674,20 @@ internal sealed class AntDslParser {
                     if(key.Text.Length is <1 or >40) ErrorAt(key,"Group key must have 1..40 characters.");
                     Expect(")");return Node(new DslGroupValue(identifier.Text,key.Text));
                 }
+                if (identifier.Text == "institution") {
+                    var literals = new List<DslToken>();
+                    if (!Is(")")) { do { literals.Add(Expect(DslTokenKind.String, "Expected a quoted institution field.")); } while (Match(",")); }
+                    Expect(")");
+                    if (literals.Count != 1) ErrorAt(identifier, "Function 'institution' expects 1 argument(s).");
+                    var fieldToken = literals[0];
+                    if (!InstitutionCatalog.IsField(fieldToken.Text)) ErrorAt(fieldToken, $"Invalid institution field '{fieldToken.Text}'.");
+                    return Node(new DslCall(identifier.Text, [new DslNumber(InstitutionCatalog.FieldCode(fieldToken.Text))]));
+                }
                 if (!ExpressionFunctions.Contains(identifier.Text)) ErrorAt(identifier, $"Unknown expression function '{identifier.Text}'.");
                 var args = new List<DslExpression>();
                 if (!Is(")")) { do { args.Add(ParseExpression()); } while (Match(",")); }
                 Expect(")");
-                var expected = identifier.Text switch { "recipe_unlocked" or "food_value" or "source_id_at" or "queen_source_id_at" or "building_id_at" or "queen_building_id_at" or "source_x" or "source_y" or "source_amount" or "source_type" or "queen_source_x" or "queen_source_y" or "queen_source_amount" or "queen_source_type" or "building_x" or "building_y" or "building_ready" or "building_busy" or "building_can_feed" or "building_phase" or "building_material" or "building_cost" or "building_work" or "recipe_work" or "abs" or "queen_x_at" or "queen_y_at" or "queen_amount_at" or "queen_food_type_at" or "claimed_amount" or "ally_x" or "ally_y" or "ally_health" or "stock" => 1, "recipe_ready" or "holder_stock" or "holder_output" or "min" or "max" => 2, _ => -1 };
+                var expected = identifier.Text switch { "recipe_unlocked" or "food_value" or "source_id_at" or "queen_source_id_at" or "building_id_at" or "queen_building_id_at" or "source_x" or "source_y" or "source_amount" or "source_type" or "queen_source_x" or "queen_source_y" or "queen_source_amount" or "queen_source_type" or "building_x" or "building_y" or "building_ready" or "building_busy" or "building_can_feed" or "building_phase" or "building_material" or "building_cost" or "building_work" or "recipe_work" or "abs" or "queen_x_at" or "queen_y_at" or "queen_amount_at" or "queen_food_type_at" or "claimed_amount" or "ally_x" or "ally_y" or "ally_health" or "stock" or "institution" => 1, "recipe_ready" or "holder_stock" or "holder_output" or "min" or "max" => 2, _ => -1 };
                 if (args.Count != expected) ErrorAt(identifier, $"Function '{identifier.Text}' expects {expected} argument(s).");
                 return Node(new DslCall(identifier.Text, args));
             }

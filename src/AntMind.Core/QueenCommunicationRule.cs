@@ -43,7 +43,7 @@ public sealed class QueenCommunicationRule : IWorldRule {
         var queen = world.QueenResources.ToDictionary(x => x.Id);
         var ants = world.Ants.ToBuilder();
         bool Allowed(AntView ant) => Connected(world, ant.Position) &&
-            world.Tick-ant.LastQueenCommunicationTick >= world.Config.QueenCommunicationCooldownTicks;
+            world.Tick-ant.LastQueenCommunicationTick >= InstitutionMechanics.DefenseCooldown(world);
         // All explicit uploads settle before downloads, in stable ant order.
         for (var i = 0; i < ants.Count; i++) {
             var ant = ants[i];

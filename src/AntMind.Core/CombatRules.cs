@@ -69,7 +69,7 @@ public sealed class CombatRule : IWorldRule {
     public int Order => 25;
     public WorldState Apply(WorldState world) {
         // Stable ant-ID order resolves attacks first. A killed enemy cannot retaliate or drop twice.
-        foreach (var ant in world.Ants.Where(x=>x.Intent==AntAction.Attack)) {
+        foreach (var ant in InstitutionMechanics.GuardFirst(world, world.Ants.Where(x=>x.Intent==AntAction.Attack))) {
             var type=world.Config.AntType(ant.Species);
             var enemy=world.Objects.Find("enemy",ant.AttackTargetId) as EnemyView;
             var error=type.AttackDamage==0 ? "cannot_attack" : world.Tick-ant.LastAttackTick<type.AttackCooldownTicks ? "attack_cooldown" :

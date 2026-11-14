@@ -28,11 +28,14 @@ internal static class SaveMigration {
             if(!programs.Any(p=>p.Species==builder.Id))programs=programs.Add(new(builder.Id,0,null,[new(0,"built-in builder added by migration",DefaultProgramSources.Builder)]));
             save=save with {Format=4,Protocol=15,World=world,Programs=programs};
         }
+        // 固定写 5/18：不能用 SavedGames.Format/Protocol.Version 常量，否则升 6/19 后旧档会跳过下一级。
         if(save.Format==4 && save.Protocol is >=15 and <=17) {
             var config=save.World.Config;
             var buildings=config.Production.Buildings.Select(b=>b.Id=="cache"?b with {CanFeedAnts=true,Name=b.Name=="中转站"?"中转据点":b.Name}:b).ToImmutableArray();
-            save=save with {Format=SavedGames.Format,Protocol=Protocol.Version,World=save.World with {Config=config with {Production=config.Production with {Buildings=buildings}}}};
+            save=save with {Format=5,Protocol=18,World=save.World with {Config=config with {Production=config.Production with {Buildings=buildings}}}};
         }
+        // save5/wire18 → save6/wire19：六步补值，全部在内存候选上完成，不回写原档。
+        if(save.Format==5 && save.Protocol==18)save=UpgradeV5(save);
         if(legacy && save.Format==SavedGames.Format && save.Protocol==Protocol.Version) {
             // Upgrade only the exact built-in old goals. User-defined delivered metrics retain their meaning.
             var definitions=save.World.Config.Milestones.Select(d=> {
@@ -44,6 +47,29 @@ internal static class SaveMigration {
             save=save with {World=new MilestoneRule().Apply(world)};
         }
         return save;
+    }
+    private static SavedGame UpgradeV5(SavedGame save) {
+        var world=save.World;
+        var tick=world.Tick;
+        // ① 独立子种子：由旧档 RandomState 确定性派生，绝不读写主 RandomState。
+        var (creatureSeed,nestSeed)=Simulation.DeriveSubseeds(world.RandomState);
+        // ②③④ 地下巢穴默认布局、制度默认档位、BlockedCells/ObservedChambers。
+        var nest=NestLayout.Default;
+        var institution=InstitutionState.Initial(tick);
+        // ⑤ EnemyView 七个标量字段补默认值（反序列化已有默认，仍显式写一次便于核查）。
+        var objects=world.Objects;
+        foreach(var enemy in objects.All<EnemyView>())
+            objects=objects.Put(enemy with {
+                CreatureKind="predator_beetle", CarcassFoodType="meat", BlockCells=0, HerdId=0,
+                LastGrazeTick=-1000000, TargetChamberX=-1, TargetChamberY=-1 });
+        // ⑥ ObservedBuildings / 旧工地 ConstructionItem=fiber / cache.CanFeedAnts 保持不动。
+        var config=world.Config with {
+            Institutions=new InstitutionConfig(), Creatures=new CreatureConfig(), NestLayout=new NestLayoutConfig() };
+        world=world with {
+            Config=config, Objects=objects,
+            CreatureSeed=creatureSeed, NestSeed=nestSeed, Nest=nest, Institution=institution,
+            BlockedCells=[], ObservedChambers=[NestLayout.CoreIndex] };
+        return save with {Format=SavedGames.Format,Protocol=Protocol.Version,World=world};
     }
     // Rename the old serialized field before strict DTO deserialization, only for known legacy versions.
     public static string NormalizeLegacyJson(string json) {

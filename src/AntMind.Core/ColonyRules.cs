@@ -6,7 +6,7 @@ public sealed class EatingRule : IWorldRule {
     public string Id => "core.eating";
     public int Order => 32;
     public WorldState Apply(WorldState world) {
-        foreach(var original in world.Ants) {
+        foreach(var original in InstitutionMechanics.EligibleAnts(world)) {
             var ant=original;
             if(ant.HealUntilTick==0 && ant.Intent!=AntAction.Eat) continue;
             var definition=world.Config.Foods.FirstOrDefault(x=>x.Id==ant.EatFood);
@@ -18,7 +18,7 @@ public sealed class EatingRule : IWorldRule {
                 station.Store.Get(ant.EatFood)<1?"insufficient_food":null : null;
             var error=ant.LastDamageTick==world.Tick ? "eating_interrupted" : ant.Health>=ant.MaxHealth ? "already_healthy" :
                 definition is null || !definition.Edible ? "invalid_food_type" : ant.EatHolderId < -1?"invalid_food_holder":ant.EatHolderId>0?stationError:
-                !cargo && !atNest ? "no_carried_food" : !cargo && (world.Stock.Get(ant.EatFood)<1 || world.DevelopmentValue-definition.Value<world.Config.MinimumReserve) ? "insufficient_food" : null;
+                !cargo && !atNest ? "no_carried_food" : !cargo && (world.Stock.Get(ant.EatFood)<1 || world.DevelopmentValue-definition.Value<InstitutionMechanics.EffectiveReserve(world)) ? "insufficient_food" : null;
             if(error is not null) ant=ant with { HealUntilTick=0, Intent=AntAction.Wait, ActionStatus=ActionStatus.Failed,ActionResult=error };
             else if(ant.HealUntilTick==0) ant=ant with { HealUntilTick=checked(world.Tick+world.Config.EatingTicks),
                 Intent=AntAction.Wait,Target=null,ActionStatus=ActionStatus.Running,ActionResult="eating" };
@@ -44,7 +44,7 @@ public sealed class ClaimRule : IWorldRule {
     public WorldState Apply(WorldState world) {
         var claims=world.Claims.Where(c=>c.ExpiresTick>world.Tick && world.Ants.Any(a=>a.Id==c.AntId) &&
             world.Resources.Any(f=>f.Id==c.FoodId)).ToList();
-        foreach(var ant in world.Ants) {
+        foreach(var ant in InstitutionMechanics.ClaimOrder(world)) {
             if(!ant.ReleaseClaim && ant.ClaimFoodId==0) continue;
             var error="";
             if(ant.ReleaseClaim) claims.RemoveAll(x=>x.AntId==ant.Id);
@@ -77,8 +77,10 @@ public sealed class ClaimCleanupRule : IWorldRule {
     public WorldState Apply(WorldState world) {
         var result=ImmutableArray.CreateBuilder<ResourceClaim>();
         var remaining=world.Resources.ToDictionary(f=>f.Id,f=>f.Amount);
+        var crunch = InstitutionMechanics.ClaimCrunch(world);
+        var window = crunch ? world.Config.InteractionCooldownTicks : 0;
         foreach(var claim in world.Claims.OrderBy(c=>c.AntId)) {
-            if(claim.ExpiresTick<=world.Tick || !world.Ants.Any(a=>a.Id==claim.AntId)) continue;
+            if(claim.ExpiresTick-window<=world.Tick || !world.Ants.Any(a=>a.Id==claim.AntId)) continue;
             var quantity=Math.Min(claim.Quantity,remaining.GetValueOrDefault(claim.FoodId));
             if(quantity<=0)continue;
             result.Add(claim with { Quantity=quantity });remaining[claim.FoodId]-=quantity;
@@ -91,7 +93,7 @@ public sealed class FollowRule : IWorldRule {
     public string Id=>"core.follow";
     public int Order=>19;
     public WorldState Apply(WorldState world) {
-        foreach(var ant in world.Ants.Where(a=>a.Intent==AntAction.Follow)) {
+        foreach(var ant in InstitutionMechanics.GuardFirst(world, world.Ants.Where(a=>a.Intent==AntAction.Follow))) {
             var ally=world.Ants.FirstOrDefault(a=>a.Id==ant.FollowAntId && a.Id!=ant.Id &&
                 CombatMath.Distance(a.Position,ant.Position)<=world.Config.AntType(ant.Species).VisionCells*Point.UnitsPerCell);
             var valid=ally is not null && ant.FollowDistance is >=0 and <=16000;

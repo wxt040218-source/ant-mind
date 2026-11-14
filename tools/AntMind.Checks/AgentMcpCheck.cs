@@ -42,7 +42,7 @@ internal static class AgentMcpCheck {
             await Rpc("initialize",new {protocolVersion="2025-06-18",capabilities=new {},clientInfo=new {name="agent-event-mcp-check",version="1"}});
             await Send(new {jsonrpc="2.0",method="notifications/initialized"});
             var tools=await Rpc("tools/list",new {});var names=tools.GetProperty("tools").EnumerateArray().Select(x=>x.GetProperty("name").GetString()).ToHashSet();
-            check(new[]{"watch_events","read_events","observe_summary","configure_group","preview_program","preview_program_batch"}.All(names.Contains) && names.Count==15,"real MCP advertises all Agent tools including whole-species preflight with valid schemas");
+            check(new[]{"watch_events","read_events","observe_summary","configure_group","preview_program","preview_program_batch"}.All(names.Contains) && names.Count==16,"real MCP advertises all Agent tools including whole-species preflight with valid schemas");
             var first=await Summary();var world=first.GetProperty("WorldId").GetString()!;
             var original=await Tool("observe",new {});
             check(JsonSerializer.Serialize(first).Length<JsonSerializer.Serialize(original).Length/2 && !first.TryGetProperty("Programs",out _),"real compact observation is substantially smaller and excludes program history");
